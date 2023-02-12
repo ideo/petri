@@ -140,22 +140,23 @@ if __name__ == "__main__":
 
     # timeseries - unique swipes per day
     swipe_cnts_df = df.groupby('Access Date').size().rename('Swipe Count').reset_index(level=0)
-    # st.line_chart(data=swipe_cnts_df, x='Access Date', y='Swipe Count')
+    st.line_chart(data=swipe_cnts_df, x='Access Date', y='Swipe Count')
     # TIMESERIES - group by day of week
-    # line = alt.Chart(swipe_cnts_df).mark_line().encode(
-    #     x='Access Date',
-    #     y='mean(Swipe Count)',
-    # )
+
     line = alt.Chart(swipe_cnts_df).mark_line(
         color='red',
         # size=3
     ).transform_window(
         rolling_mean='mean(Swipe Count)',
         # The number of values before and after the current value to include.
-        frame=[-4, 0]
+        frame=[-7, 0]
     ).encode(
         x='Access Date:T',
         y='rolling_mean:Q'
+    )
+    band = alt.Chart(swipe_cnts_df).mark_errorband(extent='ci').encode(
+        x='Access Date:T',
+        y=alt.Y('mean(Swipe Count)', title='Miles/Gallon'),
     )
 
     bars = alt.Chart(swipe_cnts_df).mark_bar().encode(
