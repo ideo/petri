@@ -1,6 +1,10 @@
 import streamlit as st
 import pandas as pd
+# import seaborn as sns
+import datetime
 
+
+date_format = '%d/%m/%Y'
 
 def fix_headers(df):
     # fix headers - weird split across 2 rows
@@ -17,8 +21,10 @@ def remove_junk(df):
 
 def fix_dates(df):
     # convert to string to date
-    df['Access Date'] = pd.to_datetime(df['Access Date'], format='%d/%m/%Y')
+    df['Access Date'] = pd.to_datetime(df['Access Date'], format=date_format)
+    df['Day Of Week'] = df['Access Date'].dt.day_name()
     df['Access Date'] = df['Access Date'].dt.date
+    # st.write(df.dtypes)
     return df
 
 
@@ -50,11 +56,52 @@ def load_baseline(f="D FORD ACCESS (1).xlsx"):
 
 
 # st.code(df.dtypes)
+# st.write(df.head())
+
+
 if __name__ == "__main__":
     print("Hello, World!")
 
     df = load_baseline()
+    min_date_value = df['Access Date'].min()
+    max_date_value = df['Access Date'].max()
 
     # App Output
     st.title("Baseline Door Data!")  # add a title
-    st.write(df.head())
+
+    # Remove Weekends button
+    remove_weekend = st.radio("Remove weekends?", (True, False), 0, horizontal=True)
+    if remove_weekend:
+        # locate indices
+        sat_idx = df[df['Day Of Week'] == 'Saturday'].index
+        sun_idx = df[df['Day Of Week'] == 'Sunday'].index
+        # drop by indices
+        df = df.drop(sat_idx)
+        df = df.drop(sun_idx)
+
+
+    # Remove Holidays
+    remove_holidays = st.radio("Remove Holidays? (Sat, 17 Dec 2022 - Sun, 06 Jan 2023) ",
+                               (True, False), 0, horizontal=True)
+    if remove_holidays:
+        start_date, end_date = datetime.date(2022, 12, 17), datetime.date(2023, 1, 6)
+        # start_date, end_date = st.date_input('Time Period to Remove',
+        #                                      value=[datetime.date(2022, 12, 17),
+        #                                             datetime.date(2023, 1, 6)],
+        #                                      min_value=min_date_value,
+        #                                      max_value=max_date_value
+        #                                      )
+
+
+        # locate indices
+        holiday_idx = df[(df['Access Date'] >= start_date) & (df['Access Date'] <= end_date)].index
+        # drop by indices
+        df = df.drop(holiday_idx)
+
+
+    # timeseries - unique swipes per day
+    swipe_cnts_df = df.groupby('Access Date').size().rename('Swipe Count').reset_index(level=0)
+    st.line_chart(data=swipe_cnts_df, x='Access Date', y='Swipe Count')
+
+
+
