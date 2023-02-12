@@ -7,6 +7,7 @@ import calendar
 date_format = '%d/%m/%Y'
 day_names = list(calendar.day_name)
 
+
 def fix_headers(df):
     # fix headers - weird split across 2 rows
     return df.rename(
@@ -16,7 +17,8 @@ def fix_headers(df):
 
 def remove_junk(df):
     # gets rid of empty rows & that weird split if it's there in future
-    df.drop(columns=['Category Used'], inplace=True)  # empty column
+    if 'Category Used' in df.columns:  # since empty, this might be removed in future
+        df.drop(columns=['Category Used'], inplace=True)  # empty column
     return df.dropna()
 
 
@@ -42,23 +44,40 @@ def count_one_swipe_per_day(df):
     return df.drop_duplicates(ignore_index=True)
 
 
-def clean_df(df):
+def compatability_check(df, baseline_headers=None):
+    # check if comparable to baseline columns
+    if baseline_headers is not None:
+        comparison_headers = sorted(list(df.columns.values))
+        if comparison_headers != baseline_headers:
+            st.code('Columns do not match baseline file.')
+            st.code(f'Required Columns: {baseline_headers}')
+            st.code(f"Uploaded File Columns: {comparison_headers}")
+            return df, baseline_headers, False
+    else:
+        # extract here b/c some columns are dropped during anonymize
+        baseline_headers = sorted(list(df.columns.values))
+    return df, baseline_headers, True
+
+
+def clean_df(df, baseline_headers=None):
     df = fix_headers(df)
     df = remove_junk(df)
-    df = fix_dates(df)
-    df = anonymize(df)
-    df = count_one_swipe_per_day(df)
-    return df
+    df, baseline_headers, is_compatible = compatability_check(df, baseline_headers)
+    if is_compatible:
+        df = fix_dates(df)
+        df = anonymize(df)
+        df = count_one_swipe_per_day(df)
+    return df, baseline_headers
 
 
 def load_baseline(f="D FORD ACCESS (1).xlsx"):
     df = pd.read_excel(f)
-    df = clean_df(df)
-    return df
+    df, baseline_headers = clean_df(df)
+    return df, baseline_headers
 
 
-def remove_weekend(df):
-    remove = st.radio("Remove weekends?", (True, False), 0, horizontal=True)
+def remove_weekend(df, tab):
+    remove = st.radio("Remove weekends?", (True, False), 0, key=f'wknd_{tab}', horizontal=True)
     if remove:
         # locate indices
         sat_idx = df[df['Day Of Week'] == 'Saturday'].index
@@ -68,9 +87,10 @@ def remove_weekend(df):
         df = df.drop(sun_idx)
     return df
 
-def remove_holiday(df):
+
+def remove_holiday(df, tab):
     remove = st.radio("Remove Holidays? (Sat, 17 Dec 2022 - Sun, 06 Jan 2023) ",
-                           (True, False), 0, horizontal=True)
+                      (True, False), 0, key=f'hols_{tab}', horizontal=True)
     if remove:
         start_date, end_date = datetime.date(2022, 12, 17), datetime.date(2023, 1, 6)
         # locate indices
@@ -80,16 +100,36 @@ def remove_holiday(df):
     return df
 
 
-def include_persons(df, person_types):
+def include_persons(df, person_types, tab):
     options = st.multiselect(
         'Who to include?',
         person_types,
-        person_types)
+        person_types,
+        key=f'persons_{tab}'
+    )
 
     for type in person_types:
         if type not in options:
             person_type_idx = df[df['Person Type'] == type].index
             df = df.drop(person_type_idx)
+    return df
+
+
+def filter_options(df, person_types, tab='baseline'):
+    sc1, sc2, sc3 = st.columns(3)
+
+    # Remove Weekends button
+    with sc1:
+        df = remove_weekend(df, tab)
+
+    # Remove Holidays
+    with sc2:
+        df = remove_holiday(df, tab)
+
+    # include all person types by default
+    with sc3:
+        df = include_persons(df, person_types, tab)
+
     return df
 
 
@@ -167,37 +207,20 @@ def timeseries_by_day(df):
     st.altair_chart(chart, theme=None, use_container_width=True)
 
 
-def baseline_variables(df):
+def extract_variables(df, file_type='Baseline'):
     min_date_value = df['Access Date'].min()
     max_date_value = df['Access Date'].max()
     person_types = df['Person Type'].unique()
+
+    st.title(f"{file_type} Door Data!")  # add a title
+    st.subheader(f"{min_date_value:%a, %d %b %Y} - {max_date_value:%a, %d %b %Y}")
+
     return min_date_value, max_date_value, person_types
 
 
-def filter_options(df, person_types, tab='baseline'):
-    sc1, sc2, sc3 = st.columns(3)
-
-    # Remove Weekends button
-    with sc1:
-        df = remove_weekend(df, tab)
-
-    # Remove Holidays
-    with sc2:
-        df = remove_holiday(df, tab)
-
-    # include all person types by default
-    with sc3:
-        df = include_persons(df, person_types)
-
-    return df
-
-
 def baseline_tab(df):
-
-    min_date_value, max_date_value, person_types = baseline_variables(df)
-
-    st.title("Baseline Door Data!")  # add a title
-    st.subheader(f"{min_date_value:%a, %d %b %Y} - {max_date_value:%a, %d %b %Y}")
+    # constant variables based on data
+    min_date_value, max_date_value, person_types = extract_variables(df)
 
     st.markdown("""
                  TKTK put some copy here to explain site
@@ -222,7 +245,6 @@ def baseline_tab(df):
                     Description - data cleaned. removed some data intentionally .
                     """)
 
-
     # Filter options - person type, dates, weekend
     df = filter_options(df, person_types)
 
@@ -240,22 +262,28 @@ def baseline_tab(df):
     timeseries_by_day(swipe_cnts_df)
 
 
-def upload_data():
-    uploaded_file = st.file_uploader("Choose a comparison file")
+def upload_data(baseline_headers):
+    uploaded_file = st.file_uploader("Choose a comparison file (csv or xlsx)")
     if uploaded_file is not None:
+        extension = uploaded_file.name.split('.')[-1]
         # Can be used wherever a "file-like" object is accepted:
-        try:
+        if extension == 'csv':
+            # st.code("reading cvs")
             dataframe = pd.read_csv(uploaded_file)
-        except:
+        elif extension == 'xlsx':
             dataframe = pd.read_excel(uploaded_file)
-        df = clean_df(dataframe)
+        else:
+            st.code("Incompatiable file. Try .csv or .xlsx")
+            return
+
+        df, baseline_headers = clean_df(dataframe, baseline_headers)
         return df
 
 
-def comparison_tab(baseline_df):
-    df = upload_data()
+def comparison_tab(baseline_df, baseline_headers):
+    df = upload_data(baseline_headers)
     if df is not None:
-        st.code(df.head())
+        min_date_value, max_date_value, person_types = extract_variables(df, file_type='Comparison')
 
     # HUNCHES
     # more people will come on wednesdays
@@ -266,15 +294,15 @@ def comparison_tab(baseline_df):
 
 
 def swiper_patterns(df):
-    min_date_value, max_date_value, person_types = baseline_variables(df)
+    # constant variables based on data
+    min_date_value, max_date_value, person_types = extract_variables(df)
     # Filter options - person type, dates, weekend
-    df = filter_options(df, person_types)
+    df = filter_options(df, person_types, tab='swiper')
 
     # how many days a week is the same card used?
     st.code(df.head())
     st.code(df.groupby('anon_id').groups)
     # .size().rename('Swipe Count').reset_index(level=0)
-
 
     # some people come 1 day a week, some 5 - what's the distribution?
     # each week (or month or range), look at hist of how often same card is used in time period
@@ -288,11 +316,8 @@ def swiper_patterns(df):
     # note - WFH is still work :)
 
 
-
-
 if __name__ == "__main__":
-
-    df = load_baseline()
+    df, baseline_headers = load_baseline()
 
     tab1, tab2, tab3 = st.tabs(["Baseline", "Patterns by Swiper", "Comparison"])
     # App Output
@@ -303,4 +328,4 @@ if __name__ == "__main__":
         swiper_patterns(df)
 
     with tab3:
-        comparison_tab(df)
+        comparison_tab(df, baseline_headers)
