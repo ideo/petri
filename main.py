@@ -167,10 +167,34 @@ def timeseries_by_day(df):
     st.altair_chart(chart, theme=None, use_container_width=True)
 
 
-def baseline_tab(df):
+def baseline_variables(df):
     min_date_value = df['Access Date'].min()
     max_date_value = df['Access Date'].max()
     person_types = df['Person Type'].unique()
+    return min_date_value, max_date_value, person_types
+
+
+def filter_options(df, person_types, tab='baseline'):
+    sc1, sc2, sc3 = st.columns(3)
+
+    # Remove Weekends button
+    with sc1:
+        df = remove_weekend(df, tab)
+
+    # Remove Holidays
+    with sc2:
+        df = remove_holiday(df, tab)
+
+    # include all person types by default
+    with sc3:
+        df = include_persons(df, person_types)
+
+    return df
+
+
+def baseline_tab(df):
+
+    min_date_value, max_date_value, person_types = baseline_variables(df)
 
     st.title("Baseline Door Data!")  # add a title
     st.subheader(f"{min_date_value:%a, %d %b %Y} - {max_date_value:%a, %d %b %Y}")
@@ -198,20 +222,9 @@ def baseline_tab(df):
                     Description - data cleaned. removed some data intentionally .
                     """)
 
-    # Radio buttons
-    sc1, sc2, sc3 = st.columns(3)
 
-    # Remove Weekends button
-    with sc1:
-        df = remove_weekend(df)
-
-    # Remove Holidays
-    with sc2:
-        df = remove_holiday(df)
-
-    # include all person types by default
-    with sc3:
-        df = include_persons(df, person_types)
+    # Filter options - person type, dates, weekend
+    df = filter_options(df, person_types)
 
     # aggregate unique swipes by day
     swipe_cnts_df = unique_swipes_per_day(df)
@@ -227,6 +240,56 @@ def baseline_tab(df):
     timeseries_by_day(swipe_cnts_df)
 
 
+def upload_data():
+    uploaded_file = st.file_uploader("Choose a comparison file")
+    if uploaded_file is not None:
+        # Can be used wherever a "file-like" object is accepted:
+        try:
+            dataframe = pd.read_csv(uploaded_file)
+        except:
+            dataframe = pd.read_excel(uploaded_file)
+        df = clean_df(dataframe)
+        return df
+
+
+def comparison_tab(baseline_df):
+    df = upload_data()
+    if df is not None:
+        st.code(df.head())
+
+    # HUNCHES
+    # more people will come on wednesdays
+
+    # do more people on other days too?
+    # do people come less ?
+    # combo of both?
+
+
+def swiper_patterns(df):
+    min_date_value, max_date_value, person_types = baseline_variables(df)
+    # Filter options - person type, dates, weekend
+    df = filter_options(df, person_types)
+
+    # how many days a week is the same card used?
+    st.code(df.head())
+    st.code(df.groupby('anon_id').groups)
+    # .size().rename('Swipe Count').reset_index(level=0)
+
+
+    # some people come 1 day a week, some 5 - what's the distribution?
+    # each week (or month or range), look at hist of how often same card is used in time period
+
+    # per card, look at avg times in studio per week (across baseline)
+    # buttons to remove contractors!!
+    # remove weekend & holiday
+
+    # note - missing tailgaters
+    # note - missing events (brings in more people) & trips (to Detroit or elsewhere)
+    # note - WFH is still work :)
+
+
+
+
 if __name__ == "__main__":
 
     df = load_baseline()
@@ -236,3 +299,8 @@ if __name__ == "__main__":
     with tab1:
         baseline_tab(df)
 
+    with tab2:
+        swiper_patterns(df)
+
+    with tab3:
+        comparison_tab(df)
