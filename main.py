@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-# import seaborn as sns
+import altair as alt
 import datetime
 
 
@@ -104,4 +104,13 @@ if __name__ == "__main__":
     st.line_chart(data=swipe_cnts_df, x='Access Date', y='Swipe Count')
 
 
+    swipe_cnts_df['Day Of Week'] = pd.to_datetime(swipe_cnts_df['Access Date'], format='%Y-%m-%d')
+    swipe_cnts_df['Day Of Week'] = swipe_cnts_df['Day Of Week'].dt.day_name()
 
+    chart = alt.Chart(swipe_cnts_df).mark_line().encode(
+        x='Access Date',
+        y='Swipe Count',
+        color=alt.Color('Day Of Week', sort=['Monday'])
+    ).interactive()
+
+    st.altair_chart(chart, theme=None, use_container_width=True)
