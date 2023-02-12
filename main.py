@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import datetime
-
+import calendar
 
 date_format = '%d/%m/%Y'
+day_names = list(calendar.day_name)
 
 def fix_headers(df):
     # fix headers - weird split across 2 rows
@@ -103,7 +104,7 @@ if __name__ == "__main__":
     swipe_cnts_df = df.groupby('Access Date').size().rename('Swipe Count').reset_index(level=0)
     st.line_chart(data=swipe_cnts_df, x='Access Date', y='Swipe Count')
 
-
+    # timeseries - unique swipes per day - split by day of week
     swipe_cnts_df['Day Of Week'] = pd.to_datetime(swipe_cnts_df['Access Date'], format='%Y-%m-%d')
     swipe_cnts_df['Day Of Week'] = swipe_cnts_df['Day Of Week'].dt.day_name()
 
@@ -111,6 +112,24 @@ if __name__ == "__main__":
         x='Access Date',
         y='Swipe Count',
         color=alt.Color('Day Of Week', sort=['Monday'])
+    ).interactive()
+
+    st.altair_chart(chart, theme=None, use_container_width=True)
+
+    # timeseries - unique swipes per day - split by day of week
+    chart = alt.Chart(swipe_cnts_df).mark_line().encode(
+        x=alt.X('Day Of Week', sort=day_names),
+        y='Swipe Count',
+        color=alt.Color('Day Of Week', sort=['Monday']),
+    ).interactive()
+
+    st.altair_chart(chart, theme=None, use_container_width=True)
+
+    # timeseries - unique swipes per day - split by day of week
+    chart = alt.Chart(swipe_cnts_df).mark_boxplot().encode(
+        x=alt.X('Day Of Week', sort=day_names),
+        y='Swipe Count',
+        color=alt.Color('Day Of Week', sort=['Monday']),
     ).interactive()
 
     st.altair_chart(chart, theme=None, use_container_width=True)
