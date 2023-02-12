@@ -27,7 +27,6 @@ def fix_dates(df):
     df['Access Date'] = pd.to_datetime(df['Access Date'], format=date_format)
     df['Day Of Week'] = df['Access Date'].dt.day_name()
     df['Access Date'] = df['Access Date'].dt.date
-    # st.write(df.dtypes)
     return df
 
 
@@ -39,7 +38,6 @@ def anonymize(df):
 
 def count_one_swipe_per_day(df):
     # we only care if person's card was used during a given day
-    # df.drop(columns=['Person Type', 'Reader Description', 'Transaction Type'], inplace=True)
     df.drop(columns=['Reader Description', 'Transaction Type'], inplace=True)
     return df.drop_duplicates(ignore_index=True)
 
@@ -50,7 +48,8 @@ def compatability_check(df, baseline_headers=None):
         comparison_headers = sorted(list(df.columns.values))
         if comparison_headers != baseline_headers:
             st.code('Columns do not match baseline file.')
-            st.code(f'Required Columns: {baseline_headers}')
+            min_required_headers = [x for x in baseline_headers if x not in ["Last Name", "First Name"]]
+            st.code(f'Required Columns: {min_required_headers}')
             st.code(f"Uploaded File Columns: {comparison_headers}")
             return df, baseline_headers, False
     else:
@@ -59,7 +58,7 @@ def compatability_check(df, baseline_headers=None):
     return df, baseline_headers, True
 
 
-def clean_df(df, baseline_headers=None):
+def clean_and_validate_df(df, baseline_headers=None):
     df = fix_headers(df)
     df = remove_junk(df)
     df, baseline_headers, is_compatible = compatability_check(df, baseline_headers)
@@ -67,12 +66,14 @@ def clean_df(df, baseline_headers=None):
         df = fix_dates(df)
         df = anonymize(df)
         df = count_one_swipe_per_day(df)
+    else:
+        df = None
     return df, baseline_headers
 
 
-def load_baseline(f="D FORD ACCESS (1).xlsx"):
+def load_baseline(f="data/D FORD ACCESS (1).xlsx"):
     df = pd.read_excel(f)
-    df, baseline_headers = clean_df(df)
+    df, baseline_headers = clean_and_validate_df(df)
     return df, baseline_headers
 
 
@@ -276,7 +277,7 @@ def upload_data(baseline_headers):
             st.code("Incompatiable file. Try .csv or .xlsx")
             return
 
-        df, baseline_headers = clean_df(dataframe, baseline_headers)
+        df, baseline_headers = clean_and_validate_df(dataframe, baseline_headers)
         return df
 
 
