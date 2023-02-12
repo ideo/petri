@@ -3,10 +3,25 @@ import pandas as pd
 import altair as alt
 import datetime
 import calendar
+from dateutil.relativedelta import relativedelta
+import numpy as np
+
 
 date_format = '%d/%m/%Y'
 day_names = list(calendar.day_name)
 
+phases = pd.DataFrame([
+    {
+        "start": "2022-11-01",
+        "end": "2023-02-07",
+        "phase": "Pre-Experiment"
+    },
+    {
+        "start": "2023-02-08",
+        # "end": "2015-12-31",
+        "phase": "Post-Experiment"
+    }
+])
 
 def fix_headers(df):
     # fix headers - weird split across 2 rows
@@ -63,6 +78,8 @@ def clean_and_validate_df(df, baseline_headers=None):
     df = remove_junk(df)
     df, baseline_headers, is_compatible = compatability_check(df, baseline_headers)
     if is_compatible:
+        print('compatible')
+        print(df.head())
         df = fix_dates(df)
         df = anonymize(df)
         df = count_one_swipe_per_day(df)
@@ -77,9 +94,8 @@ def load_baseline(f="data/D FORD ACCESS (1).xlsx"):
     return df, baseline_headers
 
 
-def remove_weekend(df, tab):
-    remove = st.radio("Remove weekends?", (True, False), 0, key=f'wknd_{tab}', horizontal=True)
-    if remove:
+def remove_weekend_data(df):
+    if df is not None:
         # locate indices
         sat_idx = df[df['Day Of Week'] == 'Saturday'].index
         sun_idx = df[df['Day Of Week'] == 'Sunday'].index
@@ -88,63 +104,125 @@ def remove_weekend(df, tab):
         df = df.drop(sun_idx)
     return df
 
-
-def remove_holiday(df, tab):
-    remove = st.radio("Remove Holidays? (Sat, 17 Dec 2022 - Sun, 06 Jan 2023) ",
-                      (True, False), 0, key=f'hols_{tab}', horizontal=True)
+def remove_weekend(baseline_df, tab, compare_df=None):
+    remove = st.radio("Remove weekends?", (True, False), 0, key=f'wknd_{tab}', horizontal=True)
     if remove:
+        baseline_df = remove_weekend_data(baseline_df)
+        compare_df = remove_weekend_data(compare_df)
+    return baseline_df, compare_df
+
+
+def remove_holiday_data(df):
+    if df is not None:
         start_date, end_date = datetime.date(2022, 12, 17), datetime.date(2023, 1, 6)
         # locate indices
         holiday_idx = df[(df['Access Date'] >= start_date) & (df['Access Date'] <= end_date)].index
         # drop by indices
-        df = df.drop(holiday_idx)
+        if holiday_idx is not None:
+            df = df.drop(holiday_idx)
     return df
 
 
-def include_persons(df, person_types, tab):
+def remove_holiday(baseline_df, tab, compare_df=None):
+    remove = st.radio("Remove Holidays? (Sat, 17 Dec 2022 - Sun, 06 Jan 2023) ",
+                      (True, False), 0, key=f'hols_{tab}', horizontal=True)
+    if remove:
+        baseline_df = remove_holiday_data(baseline_df)
+        compare_df = remove_holiday_data(compare_df)
+    return baseline_df, compare_df
+
+
+def include_person_type_data(df, options, person_types):
+    if df is not None:
+        for type in person_types:
+            if type not in options:
+                person_type_idx = df[df['Person Type'] == type].index
+                df = df.drop(person_type_idx)
+    return df
+
+def include_persons(baseline_df, person_types, tab, compare_df=None):
     options = st.multiselect(
         'Who to include?',
         person_types,
         person_types,
         key=f'persons_{tab}'
     )
-
-    for type in person_types:
-        if type not in options:
-            person_type_idx = df[df['Person Type'] == type].index
-            df = df.drop(person_type_idx)
-    return df
+    baseline_df = include_person_type_data(baseline_df, options, person_types)
+    compare_df = include_person_type_data(compare_df, options, person_types)
+    return baseline_df, compare_df
 
 
-def filter_options(df, person_types, tab='baseline'):
+def filter_options(df, person_types, tab='baseline', compare_df=None):
     sc1, sc2, sc3 = st.columns(3)
 
     # Remove Weekends button
     with sc1:
-        df = remove_weekend(df, tab)
+        df, compare_df = remove_weekend(df, tab, compare_df)
 
     # Remove Holidays
     with sc2:
-        df = remove_holiday(df, tab)
+        df, compare_df = remove_holiday(df, tab, compare_df)
 
     # include all person types by default
     with sc3:
-        df = include_persons(df, person_types, tab)
+        df, compare_df = include_persons(df, person_types, tab, compare_df)
 
-    return df
-
-
-def unique_swipes_per_day(df):
-    return df.groupby('Access Date').size().rename('Swipe Count').reset_index(level=0)
+    return df, compare_df
 
 
-def unique_swipes_line_chart(df):
+def unique_swipes_per_day(df, combined=False):
+    if combined:
+        return df.groupby(['Access Date', 'Source']).size().rename('Swipe Count').reset_index(level=0)
+    else:
+        return df.groupby('Access Date').size().rename('Swipe Count').reset_index(level=0)
+
+
+def unique_swipes_line_chart(df, comparison_df=None):
     st.markdown("""
                 ### Unique swipes sensed (Door Agnostic) 
                 *Something about this is expected / surprising*
                 """)
     # timeseries - unique swipes per day
-    st.line_chart(data=df, x='Access Date', y='Swipe Count')
+    lines = (
+        alt.Chart(df)
+        .mark_line()
+        .encode(
+            x=alt.X("Access Date:T", title="Access Date"),
+            y="Swipe Count",
+        )
+    )
+
+    if comparison_df is not None:
+        comp_lines = (
+            alt.Chart(comparison_df)
+            .mark_line()
+            .encode(
+                x=alt.X("Access Date:T", title="Access Date"),
+                y="Swipe Count",
+            )
+        )
+        rule = alt.Chart(phases).mark_rule(
+            color="black",
+            strokeWidth=3
+        ).encode(
+            x='end:T'
+        ).transform_filter(alt.datum.phase == "Pre-Experiment")
+
+        text = alt.Chart(phases).mark_text(
+            align='left',
+            baseline='middle',
+            dx=7,
+            dy=-135,
+            size=11
+        ).encode(
+            x='start:T',
+            x2='end:T',
+            text='phase',
+            color=alt.value('#000000')
+        )
+        st.altair_chart(lines + comp_lines + rule + text, theme=None, use_container_width=True)
+    else:
+        st.altair_chart(lines, theme=None, use_container_width=True)
 
 
 def bars_and_rolling_average(df):
@@ -186,7 +264,7 @@ def boxplot_by_day(df):
     chart = alt.Chart(df).mark_boxplot().encode(
         x=alt.X('Day Of Week', sort=day_names),
         y='Swipe Count',
-        color=alt.Color('Day Of Week', sort=['Monday']),
+        color=alt.Color('Day Of Week', sort=day_names),
     ).interactive()
 
     st.altair_chart(chart, theme=None, use_container_width=True)
@@ -247,7 +325,7 @@ def baseline_tab(df):
                     """)
 
     # Filter options - person type, dates, weekend
-    df = filter_options(df, person_types)
+    df, _ = filter_options(df, person_types)
 
     # aggregate unique swipes by day
     swipe_cnts_df = unique_swipes_per_day(df)
@@ -281,10 +359,46 @@ def upload_data(baseline_headers):
         return df
 
 
-def comparison_tab(baseline_df, baseline_headers):
-    df = upload_data(baseline_headers)
-    if df is not None:
-        min_date_value, max_date_value, person_types = extract_variables(df, file_type='Comparison')
+def comparison_tab(baseline_df, debug=False):
+    comparison_df = upload_data(baseline_headers)
+
+    if debug:
+        # add 2 months to baseline data
+        comparison_df = baseline_df.copy()
+        comparison_df['Access Date'] = baseline_df['Access Date'] + relativedelta(months=+2)
+        comparison_df['Day Of Week'] = pd.to_datetime(comparison_df['Access Date'], format='%Y-%m-%d')
+        comparison_df['Day Of Week'] = comparison_df['Day Of Week'].dt.day_name()
+
+    if comparison_df is not None:
+        min_date_value, max_date_value, person_types = extract_variables(comparison_df, file_type='Comparison')
+
+    # COMBINE DATA
+    baseline_df['Source'] = 'Baseline'
+    comparison_df['Source'] = 'Comparison'
+    combined_df = pd.concat([baseline_df, df], ignore_index=True)
+    min_date_value, max_date_value, person_types = extract_variables(combined_df, file_type='Combined')
+
+    # Filter options - person type, dates, weekend
+    baseline_df, comparison_df = filter_options(baseline_df, person_types, tab="comparison", compare_df=comparison_df)
+
+    # aggregate unique swipes by day
+    baseline_swipe_cnts_df = unique_swipes_per_day(baseline_df)
+    comparison_swipe_cnts_df = unique_swipes_per_day(comparison_df)
+    if debug:
+        # Randomly add or subtract up to 5 swipes per day
+        np.random.seed(42)
+        comparison_swipe_cnts_df['Swipe Count'] = comparison_swipe_cnts_df['Swipe Count'] + np.random.randint(-5, 5)
+
+    # GRAPHS
+
+    # OVERVIEW
+    unique_swipes_line_chart(baseline_swipe_cnts_df, comparison_df=comparison_swipe_cnts_df)
+    # bars_and_rolling_average(swipe_cnts_df)
+    #
+    # # SPLIT BY DAY OF WEEK
+    # boxplot_by_day(swipe_cnts_df)
+    # timeseries_by_day(swipe_cnts_df)
+
 
     # HUNCHES
     # more people will come on wednesdays
@@ -298,11 +412,11 @@ def swiper_patterns(df):
     # constant variables based on data
     min_date_value, max_date_value, person_types = extract_variables(df)
     # Filter options - person type, dates, weekend
-    df = filter_options(df, person_types, tab='swiper')
+    df,_ = filter_options(df, person_types, tab='swiper')
 
     # how many days a week is the same card used?
     st.code(df.head())
-    st.code(df.groupby('anon_id').groups)
+    # st.code(df.groupby('anon_id').size())
     # .size().rename('Swipe Count').reset_index(level=0)
 
     # some people come 1 day a week, some 5 - what's the distribution?
@@ -329,4 +443,4 @@ if __name__ == "__main__":
         swiper_patterns(df)
 
     with tab3:
-        comparison_tab(df, baseline_headers)
+        comparison_tab(df, debug=True)
