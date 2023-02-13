@@ -141,8 +141,8 @@ def compatability_check(df, baseline_headers=None):
     else:
         # extract here b/c some columns are dropped during anonymize
         baseline_headers = sorted(list(df.columns.values))
-    return df, baseline_headers, True
 
+    return df, baseline_headers, True
 
 def clean_and_validate_df(df, baseline_headers=None):
     df = fix_headers(df)
@@ -159,8 +159,23 @@ def clean_and_validate_df(df, baseline_headers=None):
     return df, baseline_headers
 
 
-def load_baseline(f="data/D FORD ACCESS (1).xlsx"):
-    df = pd.read_excel(f)
-    df, baseline_headers = clean_and_validate_df(df)
-    return df, baseline_headers
+# def load_baseline(f="data/D FORD ACCESS (1).xlsx"):
+def load_baseline(dataframe=None):
+    uploaded_file = st.file_uploader("Upload baseline data file (csv or xlsx)")
+    if uploaded_file is not None:
+        extension = uploaded_file.name.split('.')[-1]
+        # Can be used wherever a "file-like" object is accepted:
+        if extension == 'csv':
+            dataframe = pd.read_csv(uploaded_file)
+        elif extension == 'xlsx':
+            dataframe = pd.read_excel(uploaded_file)
+        else:
+            st.code("Incompatiable file. Try .csv or .xlsx")
+            return
+
+        dataframe, baseline_headers = clean_and_validate_df(dataframe)
+
+    # df = pd.read_excel(f)
+    # df, baseline_headers = clean_and_validate_df(df)
+    # return dataframe, baseline_headers
 
