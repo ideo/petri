@@ -5,6 +5,7 @@ import calendar
 
 date_format = '%d/%m/%Y'
 day_names = list(calendar.day_name)
+experiment_start_date = datetime.date(2023, 2, 8)
 
 phases = pd.DataFrame([
     {
@@ -36,12 +37,20 @@ def remove_weekend_data(df):
         df = df.drop(sun_idx)
     return df
 
-def remove_weekend(baseline_df, tab, compare_df=None):
+def remove_weekend(df, tab):
     remove = st.radio("Remove weekends?", (True, False), 0, key=f'wknd_{tab}', horizontal=True)
     if remove:
-        baseline_df = remove_weekend_data(baseline_df)
-        compare_df = remove_weekend_data(compare_df)
-    return baseline_df, compare_df
+        df = remove_weekend_data(df)
+    return df
+
+def filter_by_experiment_date(df):
+    if df is not None:
+        # locate indices
+        post_experiment_idx = df[(df['Access Date'] >= experiment_start_date)].index
+        # drop by indices
+        if post_experiment_idx is not None:
+            df = df.drop(post_experiment_idx)
+    return df
 
 
 def remove_holiday_data(df):
@@ -55,13 +64,14 @@ def remove_holiday_data(df):
     return df
 
 
-def remove_holiday(baseline_df, tab, compare_df=None):
+def remove_holiday(df, tab, baseline=False):
     remove = st.radio("Remove Holidays? (Sat, 17 Dec 2022 - Sun, 06 Jan 2023) ",
                       (True, False), 0, key=f'hols_{tab}', horizontal=True)
+    if baseline:
+        df = filter_by_experiment_date(df)
     if remove:
-        baseline_df = remove_holiday_data(baseline_df)
-        compare_df = remove_holiday_data(compare_df)
-    return baseline_df, compare_df
+        df = remove_holiday_data(df)
+    return df
 
 
 def include_person_type_data(df, options, person_types):
@@ -72,34 +82,32 @@ def include_person_type_data(df, options, person_types):
                 df = df.drop(person_type_idx)
     return df
 
-def include_persons(baseline_df, person_types, tab, compare_df=None):
+def include_persons(df, person_types, tab):
     options = st.multiselect(
         'Who to include?',
         person_types,
         person_types,
         key=f'persons_{tab}'
     )
-    baseline_df = include_person_type_data(baseline_df, options, person_types)
-    compare_df = include_person_type_data(compare_df, options, person_types)
-    return baseline_df, compare_df
+    df = include_person_type_data(df, options, person_types)
+    return df
 
-
-def filter_options(df, person_types, tab='baseline', compare_df=None):
+def filter_options(df, person_types, tab='baseline', baseline=False):
     sc1, sc2, sc3 = st.columns(3)
 
     # Remove Weekends button
     with sc1:
-        df, compare_df = remove_weekend(df, tab, compare_df)
+        df = remove_weekend(df, tab)
 
-    # Remove Holidays
+    # Remove Holidays & Other Date Filters
     with sc2:
-        df, compare_df = remove_holiday(df, tab, compare_df)
+        df = remove_holiday(df, tab, baseline)
 
     # include all person types by default
     with sc3:
-        df, compare_df = include_persons(df, person_types, tab, compare_df)
+        df = include_persons(df, person_types, tab)
 
-    return df, compare_df
+    return df
 
 def remove_junk(df):
     # gets rid of empty rows & that weird split if it's there in future
@@ -128,54 +136,39 @@ def count_one_swipe_per_day(df):
     return df.drop_duplicates(ignore_index=True)
 
 
-def compatability_check(df, baseline_headers=None):
-    # check if comparable to baseline columns
-    if baseline_headers is not None:
-        comparison_headers = sorted(list(df.columns.values))
-        if comparison_headers != baseline_headers:
-            st.code('Columns do not match baseline file.')
-            min_required_headers = [x for x in baseline_headers if x not in ["Last Name", "First Name"]]
-            st.code(f'Required Columns: {min_required_headers}')
-            st.code(f"Uploaded File Columns: {comparison_headers}")
-            return df, baseline_headers, False
-    else:
-        # extract here b/c some columns are dropped during anonymize
-        baseline_headers = sorted(list(df.columns.values))
-
-    return df, baseline_headers, True
-
-def clean_and_validate_df(df, baseline_headers=None):
+def clean_df(df):
     df = fix_headers(df)
     df = remove_junk(df)
-    df, baseline_headers, is_compatible = compatability_check(df, baseline_headers)
-    if is_compatible:
-        print('compatible')
-        print(df.head())
-        df = fix_dates(df)
-        df = anonymize(df)
-        df = count_one_swipe_per_day(df)
-    else:
-        df = None
-    return df, baseline_headers
+    df = fix_dates(df)
+    df = anonymize(df)
+    df = count_one_swipe_per_day(df)
+    return df
 
+def upload_data_file():
+    is_unlocked = False
+    baseline_df = None
+    uploaded_file = st.file_uploader("Upload data file (csv or xlsx)")
 
-# def load_baseline(f="data/D FORD ACCESS (1).xlsx"):
-def load_baseline(dataframe=None):
-    uploaded_file = st.file_uploader("Upload baseline data file (csv or xlsx)")
     if uploaded_file is not None:
         extension = uploaded_file.name.split('.')[-1]
         # Can be used wherever a "file-like" object is accepted:
         if extension == 'csv':
-            dataframe = pd.read_csv(uploaded_file)
+            baseline_df = pd.read_csv(uploaded_file)
         elif extension == 'xlsx':
-            dataframe = pd.read_excel(uploaded_file)
+            baseline_df = pd.read_excel(uploaded_file)
         else:
             st.code("Incompatiable file. Try .csv or .xlsx")
-            return
+            return baseline_df, is_unlocked
 
-        dataframe, baseline_headers = clean_and_validate_df(dataframe)
+        # Required Headers - Extra will be handled and removed; Less will be rejected
+        min_required_headers = ['Access Date', 'CDSID', 'Person Type',]
+        baseline_df = fix_headers(baseline_df)
 
-    # df = pd.read_excel(f)
-    # df, baseline_headers = clean_and_validate_df(df)
-    # return dataframe, baseline_headers
+        if all(item in baseline_df.columns.to_list() for item in min_required_headers):
+            is_unlocked = True
+            baseline_df = clean_df(baseline_df)
+        else:
+            st.code('TRY AGAIN!')
+
+    return baseline_df, is_unlocked
 

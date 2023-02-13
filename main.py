@@ -11,7 +11,7 @@ def unique_swipes_per_day(df, combined=False):
         return df.groupby('Access Date').size().rename('Swipe Count').reset_index(level=0)
 
 
-def unique_swipes_line_chart(df, comparison_df=None):
+def unique_swipes_line_chart(df, tab="Baseline"):
     st.markdown("""
                 ### Unique swipes sensed (Door Agnostic) 
                 *Something about this is expected / surprising*
@@ -25,17 +25,8 @@ def unique_swipes_line_chart(df, comparison_df=None):
             y="Swipe Count",
         )
     )
-
-    if comparison_df is not None:
-        comp_lines = (
-            alt.Chart(comparison_df)
-            .mark_line()
-            .encode(
-                x=alt.X("Access Date:T", title="Access Date"),
-                y="Swipe Count",
-            )
-        )
-
+    #
+    if tab == "Comparison":
         rule = alt.Chart(phases).mark_rule(
             color="orange",
             strokeWidth=3
@@ -55,7 +46,8 @@ def unique_swipes_line_chart(df, comparison_df=None):
             text='phase',
             color=alt.value('#000000')
         )
-        st.altair_chart(lines + comp_lines + rule + text, theme=None, use_container_width=True)
+        # st.altair_chart(lines + comp_lines + rule + text, theme=None, use_container_width=True)
+        st.altair_chart(lines + rule + text, theme=None, use_container_width=True)
     else:
         st.altair_chart(lines, theme=None, use_container_width=True)
 
@@ -85,8 +77,8 @@ def bars_and_rolling_average(df):
     st.altair_chart(bar + line, theme=None, use_container_width=True)
 
 
-def boxplot_by_day(df, compare_df=None):
-    if compare_df is None:
+def boxplot_by_day(df, tab="Baseline"):
+    if tab == 'Baseline':
         st.markdown("""
                     ### Midweek is the busiest 
                     *Something about this is expected / surprising*
@@ -95,15 +87,12 @@ def boxplot_by_day(df, compare_df=None):
     # SPLIT BY DAY OF WEEK
     df['Day Of Week'] = pd.to_datetime(df['Access Date'], format='%Y-%m-%d')
     df['Day Of Week'] = df['Day Of Week'].dt.day_name()
-    if compare_df is not None:
-        compare_df['Day Of Week'] = pd.to_datetime(df['Access Date'], format='%Y-%m-%d')
-        compare_df['Day Of Week'] = compare_df['Day Of Week'].dt.day_name()
 
-        compare_df['Source'] = 'Comparison'
+    if tab == 'Comparison':
         df['Source'] = 'Baseline'
-        combined_df = pd.concat([compare_df, df])
+        df.loc[df['Access Date'] >= experiment_start_date, 'Source'] = 'Comparison'
 
-        chart = alt.Chart(combined_df).mark_boxplot().encode(
+        chart = alt.Chart(df).mark_boxplot().encode(
             # alt.Column('Day Of Week'),
             x=alt.X('Source', title=None, axis=alt.Axis(labels=False, ticks=False), scale=alt.Scale(padding=1)),
             y='Swipe Count',
@@ -128,6 +117,7 @@ def boxplot_by_day(df, compare_df=None):
             color=alt.Color('Day Of Week', sort=day_names),
         ).interactive()
         st.altair_chart(chart, theme=None, use_container_width=True)
+
 
 def timeseries_by_day(df, tab="Baseline"):
     if tab == "Baseline":
@@ -170,14 +160,10 @@ def timeseries_by_day(df, tab="Baseline"):
         st.altair_chart(chart, theme=None, use_container_width=True)
 
 
-def extract_variables(df, file_type='Baseline', header=True):
+def extract_variables(df, file_type='Baseline'):
     min_date_value = df['Access Date'].min()
     max_date_value = df['Access Date'].max()
     person_types = df['Person Type'].unique()
-
-    if header:
-        st.title(f"{file_type} Door Data!")  # add a title
-        st.subheader(f"{min_date_value:%a, %d %b %Y} - {max_date_value:%a, %d %b %Y}")
 
     return min_date_value, max_date_value, person_types
 
@@ -185,6 +171,9 @@ def extract_variables(df, file_type='Baseline', header=True):
 def baseline_tab(df):
     # constant variables based on data
     min_date_value, max_date_value, person_types = extract_variables(df)
+
+    st.title(f"Baseline Door Data!")  # add a title
+    st.subheader(f"{min_date_value:%a, %d %b %Y} - {experiment_start_date + relativedelta(days=-1):%a, %d %b %Y}")
 
     st.markdown("""
                  TKTK put some copy here to explain site
@@ -210,7 +199,7 @@ def baseline_tab(df):
                     """)
 
     # Filter options - person type, dates, weekend
-    df, _ = filter_options(df, person_types)
+    df = filter_options(df, person_types, baseline=True)
 
     # aggregate unique swipes by day
     swipe_cnts_df = unique_swipes_per_day(df)
@@ -226,80 +215,41 @@ def baseline_tab(df):
     timeseries_by_day(swipe_cnts_df)
 
 
-def upload_data(baseline_headers):
-    uploaded_file = st.file_uploader("Choose a comparison file (csv or xlsx)")
-    if uploaded_file is not None:
-        extension = uploaded_file.name.split('.')[-1]
-        # Can be used wherever a "file-like" object is accepted:
-        if extension == 'csv':
-            # st.code("reading cvs")
-            dataframe = pd.read_csv(uploaded_file)
-        elif extension == 'xlsx':
-            dataframe = pd.read_excel(uploaded_file)
-        else:
-            st.code("Incompatiable file. Try .csv or .xlsx")
-            return
-
-        df, baseline_headers = clean_and_validate_df(dataframe, baseline_headers)
-        return df
-
-
-def remove_overlap_dates(df, filter_date=pd.to_datetime('2023-02-08')):
-    remove_idx = df[(df['Access Date'] <= filter_date)].index
-    # drop by indices
-    if remove_idx is not None:
-        df = df.drop(remove_idx)
-    return df
-
-
-def comparison_tab(baseline_df, debug=False):
-    comparison_df = upload_data(baseline_headers)
-    min_baseline_date, max_baseline_date , _ = extract_variables(baseline_df, header=False)
+def comparison_tab(df, debug=False):
+    # DATES FOR HEADER
+    min_baseline_date, max_baseline_date , person_types = extract_variables(df)
 
     if debug:
         # add 2 months to baseline data
-        comparison_df = baseline_df.copy()
-        comparison_df['Access Date'] = baseline_df['Access Date'] + relativedelta(months=+2)
-        comparison_df['Day Of Week'] = pd.to_datetime(comparison_df['Access Date'], format='%Y-%m-%d')
-        comparison_df['Day Of Week'] = comparison_df['Day Of Week'].dt.day_name()
+        faux_df = df.copy()
+        faux_df['Access Date'] = df['Access Date'] + relativedelta(months=+2)
+        faux_df['Day Of Week'] = pd.to_datetime(faux_df['Access Date'], format='%Y-%m-%d')
+        faux_df['Day Of Week'] = faux_df['Day Of Week'].dt.day_name()
+        df = pd.concat([df, faux_df], ignore_index=True)
 
-    if comparison_df is not None:
-        # remove overlap dates
-        comparison_df = remove_overlap_dates(comparison_df)
-        min_comp_dt, max_comp_dt, _ = extract_variables(comparison_df, file_type='Comparison')
-        # st.code(f'MIN {min_comp_dt}, MAX {max_comp_dt}')
+    # Filter options - person type, dates, weekend
+    df = filter_options(df, person_types, tab="comparison")
 
-        # COMBINE DATA
-        baseline_df['Source'] = 'Baseline'
-        comparison_df['Source'] = 'Comparison'
-        combined_df = pd.concat([baseline_df, comparison_df], ignore_index=True)
-        min_date_value, max_date_value, person_types = extract_variables(combined_df, file_type='Combined')
+    # aggregate unique swipes by day
+    swipe_cnts_df = unique_swipes_per_day(df)
+        # comparison_swipe_cnts_df = unique_swipes_per_day(comparison_df)
+        # combined_swipe_cnts_df = pd.concat([baseline_swipe_cnts_df, comparison_swipe_cnts_df])
+        # combined_swipe_cnts_df['Day Of Week'] = pd.to_datetime(combined_swipe_cnts_df['Access Date'], format='%Y-%m-%d')
+        # combined_swipe_cnts_df['Day Of Week'] = combined_swipe_cnts_df['Day Of Week'].dt.day_name()
+    # #
+    if debug:
+        # Randomly add or subtract up to 5 swipes per day
+        np.random.seed(42)
+        swipe_cnts_df['Swipe Count'] = swipe_cnts_df['Swipe Count'] + np.random.randint(-5, 5)
 
-        # Filter options - person type, dates, weekend
-        baseline_df, comparison_df = filter_options(baseline_df, person_types, tab="comparison", compare_df=comparison_df)
 
-        # aggregate unique swipes by day
-        baseline_swipe_cnts_df = unique_swipes_per_day(baseline_df)
-        comparison_swipe_cnts_df = unique_swipes_per_day(comparison_df)
-        combined_swipe_cnts_df = pd.concat([baseline_swipe_cnts_df, comparison_swipe_cnts_df])
-        combined_swipe_cnts_df['Day Of Week'] = pd.to_datetime(combined_swipe_cnts_df['Access Date'], format='%Y-%m-%d')
-        combined_swipe_cnts_df['Day Of Week'] = combined_swipe_cnts_df['Day Of Week'].dt.day_name()
+    # GRAPHS
+    # OVERVIEW
+    unique_swipes_line_chart(swipe_cnts_df, tab="Comparison")
 
-        if debug:
-            # Randomly add or subtract up to 5 swipes per day
-            np.random.seed(42)
-            comparison_swipe_cnts_df['Swipe Count'] = comparison_swipe_cnts_df['Swipe Count'] + np.random.randint(-5, 5)
-
-        # GRAPHS
-
-        # OVERVIEW
-        unique_swipes_line_chart(baseline_swipe_cnts_df, comparison_df=comparison_swipe_cnts_df)
-        # bars_and_rolling_average(swipe_cnts_df)
-        #
-        # # SPLIT BY DAY OF WEEK
-        boxplot_by_day(baseline_swipe_cnts_df, compare_df=comparison_swipe_cnts_df)
-        # timeseries_by_day(comparison_swipe_cnts_df, tab="Comparison")
-        timeseries_by_day(combined_swipe_cnts_df, tab="Comparison")
+    # # SPLIT BY DAY OF WEEK
+    boxplot_by_day(swipe_cnts_df, tab="Comparison")
+    timeseries_by_day(swipe_cnts_df, tab="Comparison")
 
 
     # HUNCHES
@@ -314,7 +264,7 @@ def swiper_patterns(df):
     # constant variables based on data
     min_date_value, max_date_value, person_types = extract_variables(df)
     # Filter options - person type, dates, weekend
-    df,_ = filter_options(df, person_types, tab='swiper')
+    df = filter_options(df, person_types, tab='swiper')
 
     # how many days a week is the same card used?
     st.code(df.head())
@@ -335,31 +285,7 @@ def swiper_patterns(df):
 
 if __name__ == "__main__":
     is_unlocked = False
-    # df, baseline_headers = load_baseline()
-
-    uploaded_file = st.file_uploader("Upload baseline data file (csv or xlsx)")
-    if uploaded_file is not None:
-        extension = uploaded_file.name.split('.')[-1]
-        # Can be used wherever a "file-like" object is accepted:
-        if extension == 'csv':
-            baseline_df = pd.read_csv(uploaded_file)
-        elif extension == 'xlsx':
-            baseline_df = pd.read_excel(uploaded_file)
-        else:
-            st.code("Incompatiable file. Try .csv or .xlsx")
-
-        min_required_headers = ['Access Date', 'CDSID', 'Person Type',]
-                                # 'Reader Description']
-        baseline_df = fix_headers(baseline_df)
-        # st.code(dataframe.columns.to_list())
-        # st.code(all(item in dataframe.columns.to_list() for item in min_required_headers))
-        if all(item in baseline_df.columns.to_list() for item in min_required_headers):
-        # if baseline_headers == ['Access Date', 'CDSID', 'First Name', 'Last Name', 'Person Type', 'Reader Description', 'Transaction Type']
-            is_unlocked = True
-            baseline_df, baseline_headers = clean_and_validate_df(baseline_df)
-        else:
-            st.code('TRY AGAIN!')
-
+    df, is_unlocked = upload_data_file()
 
 
     if is_unlocked:
@@ -367,13 +293,13 @@ if __name__ == "__main__":
         # App Output
 
         with tab1:
-            baseline_tab(baseline_df)
+            baseline_tab(df)
 
         with tab2:
-            swiper_patterns(baseline_df)
+            swiper_patterns(df)
 
         with tab3:
-            comparison_tab(baseline_df, debug=True)
+            comparison_tab(df, debug=True)
             # comparison_tab(df)
     else:
 
