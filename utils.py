@@ -6,6 +6,7 @@ import calendar
 date_format = '%d/%m/%Y'
 day_names = list(calendar.day_name)
 experiment_start_date = datetime.date(2023, 2, 8)
+lab_population_n = 68
 
 phases = pd.DataFrame([
     {
@@ -82,6 +83,7 @@ def include_person_type_data(df, options, person_types):
                 df = df.drop(person_type_idx)
     return df
 
+
 def include_persons(df, person_types, tab):
     options = st.multiselect(
         'Who to include?',
@@ -91,6 +93,13 @@ def include_persons(df, person_types, tab):
     )
     df = include_person_type_data(df, options, person_types)
     return df
+
+
+def include_employees_only_data(df):
+    if df is not None:
+        df = df[df['Person Type'].str.contains("EMPLOYEE")].copy()
+    return df
+
 
 def filter_options(df, person_types, tab='baseline', baseline=False):
     sc1, sc2, sc3 = st.columns(3)

@@ -11,20 +11,36 @@ def unique_swipes_per_day(df, combined=False):
         return df.groupby('Access Date').size().rename('Swipe Count').reset_index(level=0)
 
 
-def unique_swipes_line_chart(df, tab="Baseline"):
-    st.markdown("""
-                ### Unique swipes sensed (Door Agnostic) 
-                *Something about this is expected / surprising*
-                """)
+def unique_swipes_line_chart(df, tab="Baseline", pct=False):
     # timeseries - unique swipes per day
-    lines = (
-        alt.Chart(df)
-        .mark_line()
-        .encode(
-            x=alt.X("Access Date:T", title="Access Date"),
-            y="Swipe Count",
+    if pct:
+        st.markdown(f"""
+                        ### Percent of Lab Employee Population Sensed 
+                        *Only looking as Employees of London Lab (total employee n={lab_population_n})*
+                        """)
+        df['Pct Lab Population'] = df['Swipe Count']/lab_population_n
+        lines = (
+            alt.Chart(df)
+            .mark_line()
+            .encode(
+                x=alt.X("Access Date:T", title="Access Date"),
+                y=alt.Y("Pct Lab Population:Q", title="Pct Lab Employee Population", axis=alt.Axis(format='%')),
+            )
         )
-    )
+
+    else:
+        st.markdown("""
+                    ### Unique swipes sensed (Door Agnostic) 
+                    *Something about this is expected / surprising*
+                    """)
+        lines = (
+            alt.Chart(df)
+            .mark_line()
+            .encode(
+                x=alt.X("Access Date:T", title="Access Date"),
+                y="Swipe Count",
+            )
+        )
     #
     if tab == "Comparison":
         rule = alt.Chart(phases).mark_rule(
@@ -168,14 +184,14 @@ def extract_variables(df, file_type='Baseline'):
     return min_date_value, max_date_value, person_types
 
 
-def baseline_tab(df):
+def baseline_tab(raw_df):
     # constant variables based on data
-    min_date_value, max_date_value, person_types = extract_variables(df)
+    min_date_value, max_date_value, person_types = extract_variables(raw_df)
 
     st.title(f"Baseline Door Data!")  # add a title
     st.subheader(f"{min_date_value:%a, %d %b %Y} - {experiment_start_date + relativedelta(days=-1):%a, %d %b %Y}")
 
-    st.markdown("""
+    st.markdown(f"""
                  TKTK put some copy here to explain site
                  TKTK put some copy here to explain site
                  TKTK put some copy here to explain site
@@ -184,6 +200,8 @@ def baseline_tab(df):
                  TKTK put some copy here to explain site
 
                *This is emphasized*. **Anonymized!!!**
+               
+               **Baseline Population of London Lab: {lab_population_n} people**
      """)
 
     st.markdown("""
@@ -199,15 +217,18 @@ def baseline_tab(df):
                     """)
 
     # Filter options - person type, dates, weekend
-    df = filter_options(df, person_types, baseline=True)
+    df = filter_options(raw_df, person_types, baseline=True)
+    employee_df = include_employees_only_data(df)
 
     # aggregate unique swipes by day
     swipe_cnts_df = unique_swipes_per_day(df)
+    employee_only_swipe_cnts_df = unique_swipes_per_day(employee_df)
 
     # GRAPHS
 
     # OVERVIEW
     unique_swipes_line_chart(swipe_cnts_df)
+    unique_swipes_line_chart(employee_only_swipe_cnts_df, pct=True)
     bars_and_rolling_average(swipe_cnts_df)
 
     # SPLIT BY DAY OF WEEK
