@@ -235,6 +235,7 @@ def baseline_tab(raw_df):
     boxplot_by_day(swipe_cnts_df)
     timeseries_by_day(swipe_cnts_df)
 
+    swiper_patterns(df)
 
 def comparison_tab(df, debug=False):
     # DATES FOR HEADER
@@ -282,22 +283,39 @@ def comparison_tab(df, debug=False):
 
 
 def swiper_patterns(df):
-    # constant variables based on data
-    min_date_value, max_date_value, person_types = extract_variables(df)
-    # Filter options - person type, dates, weekend
-    df = filter_options(df, person_types, tab='swiper')
+
+    # SPLIT BY DAY OF WEEK
+    df['Day Of Week'] = pd.to_datetime(df['Access Date'], format='%Y-%m-%d')
+    df['Day Of Week'] = df['Day Of Week'].dt.day_name()
+    df['Year-Week'] = pd.to_datetime(df['Access Date']).dt.strftime('%Y-%U')
 
     # how many days a week is the same card used?
-    st.code(df.head())
-    # st.code(df.groupby('anon_id').size())
-    # .size().rename('Swipe Count').reset_index(level=0)
 
     # some people come 1 day a week, some 5 - what's the distribution?
     # each week (or month or range), look at hist of how often same card is used in time period
 
+    st.markdown("""
+                ### Most People Come Once a Week to Lab 
+                *Something about this is expected / surprising*
+                """)
+    df2 = df.groupby(['anon_id', 'Year-Week']).size().to_frame(name='Repeat Visits').reset_index()
+    chart = alt.Chart(df2).mark_bar().encode(
+        x=alt.X('Repeat Visits:O', axis=alt.Axis(labelAngle=0)),
+        y=alt.Y('count()', title="Count",axis=alt.Axis(labelAngle=0)),
+    ).interactive()
+    st.altair_chart(chart, theme=None, use_container_width=True)
     # per card, look at avg times in studio per week (across baseline)
-    # buttons to remove contractors!!
-    # remove weekend & holiday
+
+    st.markdown("""
+                ### Special Events Bring People in More Often  
+                *Something about this is expected / surprising*
+                """)
+    chart = alt.Chart(df2).mark_line().encode(
+        x=alt.X('Year-Week:N', title="Year-Week",axis=alt.Axis(labelAngle=0)),
+        y=alt.Y("count()", title="Repeat Visits in a Week", axis=alt.Axis(labelAngle=0)),
+        color=alt.Color('Repeat Visits:N')
+    ).interactive()
+    st.altair_chart(chart, theme=None, use_container_width=True)
 
     # note - missing tailgaters
     # note - missing events (brings in more people) & trips (to Detroit or elsewhere)
@@ -310,16 +328,13 @@ if __name__ == "__main__":
 
 
     if is_unlocked:
-        tab1, tab2, tab3 = st.tabs(["Baseline", "Patterns by Swiper", "Comparison"])
+        tab1, tab2 = st.tabs(["Baseline", "Comparison"])
         # App Output
 
         with tab1:
             baseline_tab(df)
 
         with tab2:
-            swiper_patterns(df)
-
-        with tab3:
             comparison_tab(df, debug=True)
             # comparison_tab(df)
     else:
