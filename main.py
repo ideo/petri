@@ -26,7 +26,7 @@ def unique_swipes_line_chart(df, tab="Baseline", pct=False):
                 x=alt.X("Access Date:T", title="Access Date"),
                 y=alt.Y("Pct Lab Population:Q", title="Pct Lab Employee Population", axis=alt.Axis(format='%')),
             )
-        )
+        ).interactive()
 
     else:
         st.markdown("""
@@ -40,7 +40,7 @@ def unique_swipes_line_chart(df, tab="Baseline", pct=False):
                 x=alt.X("Access Date:T", title="Access Date"),
                 y="Swipe Count",
             )
-        )
+        ).interactive()
     #
     if tab == "Comparison":
         rule = alt.Chart(phases).mark_rule(
@@ -216,13 +216,12 @@ def baseline_tab(raw_df):
                     Description - data cleaned. removed some data intentionally .
                     """)
 
-    # Filter options - person type, dates, weekend
-    df = filter_options(raw_df, person_types, baseline=True)
+    # Employee only data for some graphs
     employee_df = include_employees_only_data(df)
+    employee_only_swipe_cnts_df = unique_swipes_per_day(employee_df)
 
     # aggregate unique swipes by day
     swipe_cnts_df = unique_swipes_per_day(df)
-    employee_only_swipe_cnts_df = unique_swipes_per_day(employee_df)
 
     # GRAPHS
 
@@ -239,25 +238,17 @@ def baseline_tab(raw_df):
 
 def comparison_tab(df, debug=False):
     # DATES FOR HEADER
-    min_baseline_date, max_baseline_date , person_types = extract_variables(df)
-
+    # min_baseline_date, max_baseline_date , person_types = extract_variables(df)
     if debug:
-        # add 2 months to baseline data
-        faux_df = df.copy()
-        faux_df['Access Date'] = df['Access Date'] + relativedelta(months=+2)
-        faux_df['Day Of Week'] = pd.to_datetime(faux_df['Access Date'], format='%Y-%m-%d')
-        faux_df['Day Of Week'] = faux_df['Day Of Week'].dt.day_name()
-        df = pd.concat([df, faux_df], ignore_index=True)
+        st.header('DEBUG MODE')
+
 
     # Filter options - person type, dates, weekend
-    df = filter_options(df, person_types, tab="comparison")
+    # df = filter_options(df, person_types, tab="comparison")
 
     # aggregate unique swipes by day
     swipe_cnts_df = unique_swipes_per_day(df)
-        # comparison_swipe_cnts_df = unique_swipes_per_day(comparison_df)
-        # combined_swipe_cnts_df = pd.concat([baseline_swipe_cnts_df, comparison_swipe_cnts_df])
-        # combined_swipe_cnts_df['Day Of Week'] = pd.to_datetime(combined_swipe_cnts_df['Access Date'], format='%Y-%m-%d')
-        # combined_swipe_cnts_df['Day Of Week'] = combined_swipe_cnts_df['Day Of Week'].dt.day_name()
+
     # #
     if debug:
         # Randomly add or subtract up to 5 swipes per day
@@ -304,23 +295,35 @@ def swiper_patterns(df):
         y=alt.Y('count()', title="Count",axis=alt.Axis(labelAngle=0)),
     ).interactive()
     st.altair_chart(chart, theme=None, use_container_width=True)
-    # per card, look at avg times in studio per week (across baseline)
 
+
+    # per card, look at avg times in studio per week (across baseline)
     st.markdown("""
                 ### Special Events Bring People in More Often  
                 *Something about this is expected / surprising*
                 """)
-    chart = alt.Chart(df2).mark_line().encode(
+    chart2 = alt.Chart(df2).mark_line().encode(
         x=alt.X('Year-Week:N', title="Year-Week",axis=alt.Axis(labelAngle=0)),
         y=alt.Y("count()", title="Repeat Visits in a Week", axis=alt.Axis(labelAngle=0)),
         color=alt.Color('Repeat Visits:N')
     ).interactive()
-    st.altair_chart(chart, theme=None, use_container_width=True)
+
+    st.altair_chart(chart2, theme=None, use_container_width=True)
 
     # note - missing tailgaters
     # note - missing events (brings in more people) & trips (to Detroit or elsewhere)
     # note - WFH is still work :)
 
+
+def generate_fake_data(df):
+    # add 2 months to baseline data
+    faux_df = df.copy()
+    faux_df['Access Date'] = df['Access Date'] + relativedelta(months=+2)
+    faux_df['Day Of Week'] = pd.to_datetime(faux_df['Access Date'], format='%Y-%m-%d')
+    faux_df['Day Of Week'] = faux_df['Day Of Week'].dt.day_name()
+    faux_df = remove_weekend_data(faux_df)
+    df = pd.concat([df, faux_df], ignore_index=True)
+    return df
 
 if __name__ == "__main__":
     is_unlocked = False
@@ -328,6 +331,14 @@ if __name__ == "__main__":
 
 
     if is_unlocked:
+        with st.sidebar:
+            # Filter options - person type, dates, weekend
+            _, _, person_types = extract_variables(df)
+            df = filter_options(df, person_types)
+            # DEBUG
+            debug = st.radio("Debug Comparison Tab?", (True, False), 0, horizontal=True)
+            # DOWNLOAD CLEAN CVS option
+
         tab1, tab2 = st.tabs(["Baseline", "Comparison"])
         # App Output
 
@@ -335,8 +346,11 @@ if __name__ == "__main__":
             baseline_tab(df)
 
         with tab2:
-            comparison_tab(df, debug=True)
-            # comparison_tab(df)
+            if debug:
+                faux_df = generate_fake_data(df)
+                comparison_tab(faux_df, debug=True)
+            else:
+                comparison_tab(df)
     else:
 
         st.code('Welcome! Upload the Correct Data to Unlock')

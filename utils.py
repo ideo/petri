@@ -38,8 +38,8 @@ def remove_weekend_data(df):
         df = df.drop(sun_idx)
     return df
 
-def remove_weekend(df, tab):
-    remove = st.radio("Remove weekends?", (True, False), 0, key=f'wknd_{tab}', horizontal=True)
+def remove_weekend(df):
+    remove = st.radio("Remove weekends?", (True, False), 0, horizontal=True)
     if remove:
         df = remove_weekend_data(df)
     return df
@@ -65,9 +65,9 @@ def remove_holiday_data(df):
     return df
 
 
-def remove_holiday(df, tab, baseline=False):
+def remove_holiday(df, baseline=False):
     remove = st.radio("Remove Holidays? (Sat, 17 Dec 2022 - Sun, 06 Jan 2023) ",
-                      (True, False), 0, key=f'hols_{tab}', horizontal=True)
+                      (True, False), 0, horizontal=True)
     if baseline:
         df = filter_by_experiment_date(df)
     if remove:
@@ -84,12 +84,11 @@ def include_person_type_data(df, options, person_types):
     return df
 
 
-def include_persons(df, person_types, tab):
+def include_persons(df, person_types):
     options = st.multiselect(
         'Who to include?',
         person_types,
         person_types,
-        key=f'persons_{tab}'
     )
     df = include_person_type_data(df, options, person_types)
     return df
@@ -101,20 +100,16 @@ def include_employees_only_data(df):
     return df
 
 
-def filter_options(df, person_types, tab='baseline', baseline=False):
-    sc1, sc2, sc3 = st.columns(3)
+def filter_options(df, person_types, baseline=False):
 
     # Remove Weekends button
-    with sc1:
-        df = remove_weekend(df, tab)
+    df = remove_weekend(df)
 
     # Remove Holidays & Other Date Filters
-    with sc2:
-        df = remove_holiday(df, tab, baseline)
+    df = remove_holiday(df, baseline)
 
     # include all person types by default
-    with sc3:
-        df = include_persons(df, person_types, tab)
+    df = include_persons(df, person_types)
 
     return df
 
