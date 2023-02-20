@@ -101,7 +101,6 @@ def include_employees_only_data(df):
 
 
 def filter_options(df, person_types, baseline=False):
-
     # Remove Weekends button
     df = remove_weekend(df)
 

@@ -325,19 +325,35 @@ def generate_fake_data(df):
     df = pd.concat([df, faux_df], ignore_index=True)
     return df
 
+@st.cache
+def convert_df(df):
+    # IMPORTANT: Cache the conversion to prevent computation on every rerun
+    return df.to_csv().encode('utf-8')
+
+
 if __name__ == "__main__":
     is_unlocked = False
-    df, is_unlocked = upload_data_file()
+    raw_df, is_unlocked = upload_data_file()
 
 
     if is_unlocked:
         with st.sidebar:
             # Filter options - person type, dates, weekend
-            _, _, person_types = extract_variables(df)
-            df = filter_options(df, person_types)
+            _, _, person_types = extract_variables(raw_df)
+            df = filter_options(raw_df, person_types)
             # DEBUG
             debug = st.radio("Debug Comparison Tab?", (True, False), 0, horizontal=True)
             # DOWNLOAD CLEAN CVS option
+            st.write("""
+            ---
+            To run further analysis, download cvs. Data is anonymized""")
+            csv = convert_df(raw_df)
+            st.download_button(
+                label="Download clean data as CSV",
+                data=csv,
+                file_name='anonymous_door_data.csv',
+                mime='text/csv'
+            )
 
         tab1, tab2 = st.tabs(["Baseline", "Comparison"])
         # App Output
