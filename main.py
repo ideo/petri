@@ -330,6 +330,26 @@ def convert_df(df):
     # IMPORTANT: Cache the conversion to prevent computation on every rerun
     return df.to_csv().encode('utf-8')
 
+def sidebar(raw_df):
+    # Filter options - person type, dates, weekend
+    _, _, person_types = extract_variables(raw_df)
+    df = filter_options(raw_df, person_types)
+    # DEBUG
+    debug = st.radio("Debug Comparison Tab?", (True, False), 0, horizontal=True)
+    # DOWNLOAD CLEAN CVS option
+    st.write("""
+    ---
+    To run further analysis, download cvs. Data is anonymized and door agnostic
+    """)
+    csv = convert_df(raw_df)
+    st.download_button(
+        label="Download clean data as CSV",
+        data=csv,
+        file_name='anonymous_door_data.csv',
+        mime='text/csv'
+    )
+    return df
+
 
 if __name__ == "__main__":
     is_unlocked = False
@@ -338,22 +358,7 @@ if __name__ == "__main__":
 
     if is_unlocked:
         with st.sidebar:
-            # Filter options - person type, dates, weekend
-            _, _, person_types = extract_variables(raw_df)
-            df = filter_options(raw_df, person_types)
-            # DEBUG
-            debug = st.radio("Debug Comparison Tab?", (True, False), 0, horizontal=True)
-            # DOWNLOAD CLEAN CVS option
-            st.write("""
-            ---
-            To run further analysis, download cvs. Data is anonymized""")
-            csv = convert_df(raw_df)
-            st.download_button(
-                label="Download clean data as CSV",
-                data=csv,
-                file_name='anonymous_door_data.csv',
-                mime='text/csv'
-            )
+            df = sidebar(raw_df)
 
         tab1, tab2 = st.tabs(["Baseline", "Comparison"])
         # App Output
