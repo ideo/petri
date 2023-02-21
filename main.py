@@ -116,7 +116,8 @@ def boxplot_by_day(df, tab="Baseline"):
             column=alt.Column('Day Of Week', sort=day_names, header=alt.Header(orient='bottom')),
             # color=alt.Color('Day Of Week', sort=day_names),
         ).properties(
-            width=120
+            width=100
+            # width=120
         ).configure_facet(
             spacing=0
         ).configure_view(
@@ -297,6 +298,18 @@ def swiper_patterns(df):
     st.altair_chart(chart, theme=None, use_container_width=True)
 
 
+    # chart = alt.Chart(df2).mark_boxplot().encode(
+    #     x=alt.X('Repeat Visits:O', axis=alt.Axis(labelAngle=0)),
+    #     y=alt.Y("datum['Year-Week'].mean()"),
+    # ).interactive()
+    # # chart = alt.Chart(df2).mark_boxplot().encode(
+    # #     x=alt.X('Day Of Week', sort=day_names, axis=alt.Axis(labelAngle=0)),
+    # #     y='Swipe Count',
+    # #     color=alt.Color('Day Of Week', sort=day_names),
+    # # ).interactive()
+    # st.altair_chart(chart, theme=None, use_container_width=True)
+
+
     # per card, look at avg times in studio per week (across baseline)
     st.markdown("""
                 ### Special Events Bring People in More Often  
@@ -348,7 +361,7 @@ def sidebar(raw_df):
         file_name='anonymous_door_data.csv',
         mime='text/csv'
     )
-    return df
+    return df, debug
 
 
 if __name__ == "__main__":
@@ -358,7 +371,7 @@ if __name__ == "__main__":
 
     if is_unlocked:
         with st.sidebar:
-            df = sidebar(raw_df)
+            df, debug = sidebar(raw_df)
 
         tab1, tab2 = st.tabs(["Baseline", "Comparison"])
         # App Output
