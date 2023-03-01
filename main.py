@@ -190,23 +190,21 @@ def baseline_tab(raw_df):
     min_date_value, max_date_value, person_types = extract_variables(raw_df)
 
     st.title(f"Baseline Door Data!")  # add a title
-    st.subheader(f"{min_date_value:%a, %d %b %Y} - {experiment_start_date + relativedelta(days=-1):%a, %d %b %Y}")
+    st.subheader(f"Baseline Dates: {min_date_value:%a, %d %b %Y} - {experiment_start_date + relativedelta(days=-1):%a, %d %b %Y}")
 
     st.markdown(f"""
-                 TKTK put some copy here to explain site
-                 TKTK put some copy here to explain site
-                 TKTK put some copy here to explain site
-                 TKTK put some copy here to explain site
-                 TKTK put some copy here to explain site
-                 TKTK put some copy here to explain site
-
-               *This is emphasized*. **Anonymized!!!**
+                 This Streamlit app has been purpose built for the London lab, Project Petri “All In Wednesdays” experiment. 
+                 It is solely accessible by uploading the London lab entry data. 
                
                **Baseline Population of London Lab: {lab_population_n} people**
      """)
 
     st.markdown("""
                  ### Disclaimer: door swipe data undercounts. 
+                 Daily entries into the lab have only been counted once per day and solely from the external lab doors. 
+                 We assume there may be some undercounting as tailgating through the Lab doors often occurs. 
+                 It may be that not everyone present at the lab on a given day is counted for.
+                 
                  *On busier days, even more likely to undercount as tailgating is more likely*
                  """)
 
