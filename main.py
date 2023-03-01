@@ -4,6 +4,8 @@ import numpy as np
 from utils import *
 from PIL import Image
 
+def print_summary_stats(df):
+    st.table(df.describe().style.format('{:7,.2f}'))
 
 def unique_swipes_per_day(df, combined=False):
     if combined:
@@ -14,56 +16,43 @@ def unique_swipes_per_day(df, combined=False):
 
 def unique_swipes_line_chart(df, tab="Baseline", pct=False):
     # timeseries - unique swipes per day
+    df['Pct Lab Population'] = df['Swipe Count'] / lab_population_n
+
     if pct:
         st.markdown(f"""
                         ### Percent of Lab Employee Population Sensed 
-                        *Only looking as Employees of London Lab (total employee n={lab_population_n})*
+                        *Only looking as Employees of London Lab / Excludes Contractors & Temp 
+                        (total employee n={lab_population_n})*
                         """)
-        df['Pct Lab Population'] = df['Swipe Count']/lab_population_n
-        summary = (
-            alt.Chart(df)
-            .mark_boxplot()
-            .encode(
-                x=alt.X("Pct Lab Population:Q", title="Pct Lab Employee Population",axis=alt.Axis(format='%')),
-            ).properties(
-            #     width=400,
-                height=150
-            )
-        ).interactive()
-        lines = (
-            alt.Chart(df)
-            .mark_line()
-            .encode(
-                x=alt.X("Access Date:T", title="Access Date"),
-                y=alt.Y("Pct Lab Population:Q", title="Pct Lab Employee Population", axis=alt.Axis(format='%')),
-            )
-        ).interactive()
-
+        summaryX = alt.X("Pct Lab Population:Q", title="Pct Lab Employee Population", axis=alt.Axis(format='%'))
+        linesY = alt.Y("Pct Lab Population:Q", title="Pct Lab Employee Population", axis=alt.Axis(format='%'))
     else:
         st.markdown("""
-                    ### Unique swipes sensed (Door Agnostic) 
+                    ### Unique swipes sensed (Door Agnostic Counts) 
                     *Something about this is expected / surprising*
                     """)
-        summary = (
-            alt.Chart(df)
-            .mark_boxplot()
-            .encode(
-                x=alt.X("Swipe Count:Q", title="Swipe Count"),
-                # x="Swipe Count",title="Swipe Count",
-            ).properties(
-            #     width=400,
-                height=300
-            )
-        ).interactive()
-        lines = (
-            alt.Chart(df)
-            .mark_line()
-            .encode(
-                x=alt.X("Access Date:T", title="Access Date"),
-                y="Swipe Count",
-            )
-        ).interactive()
-    #
+        summaryX = alt.X("Swipe Count:Q", title="Swipe Count")
+        linesY = "Swipe Count"
+
+
+    summary = (
+        alt.Chart(df)
+        .mark_boxplot()
+        .encode(
+            x=summaryX,
+        ).properties(
+            height=150
+        )
+    )
+    lines = (
+        alt.Chart(df)
+        .mark_line()
+        .encode(
+            x=alt.X("Access Date:T", title="Access Date"),
+            y=linesY,
+        )
+    ).interactive()
+
     if tab == "Comparison":
         rule = alt.Chart(phases).mark_rule(
             color="orange",
@@ -91,7 +80,7 @@ def unique_swipes_line_chart(df, tab="Baseline", pct=False):
         with col1:
             st.altair_chart(summary, theme=None, use_container_width=True)
         with col2:
-            st.table(df.describe().style.format('{:7,.2f}'))
+            print_summary_stats(df)
         st.altair_chart(lines, theme=None, use_container_width=True)
         with st.expander("See chart data"):
             st.dataframe(df)
@@ -153,7 +142,15 @@ def boxplot_by_day(df, tab="Baseline"):
             color=alt.Color('Day Of Week', sort=day_names),
         ).interactive()
         st.altair_chart(chart, theme=None, use_container_width=True)
+        # ensure describe outputs correct day order
+        filtered_days = [day for day in day_names if day in df['Day Of Week'].unique()]
+        category_day = pd.api.types.CategoricalDtype(categories=filtered_days, ordered=True)
+        df['Day Of Week'] = df['Day Of Week'].astype(category_day)
 
+
+        print_summary_stats(df.groupby('Day Of Week')['Swipe Count'])
+        with st.expander("See chart data"):
+            st.dataframe(df)
 
 def timeseries_by_day(df, tab="Baseline"):
     if tab == "Baseline":
