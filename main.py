@@ -4,6 +4,7 @@ import numpy as np
 from utils import *
 from PIL import Image
 
+
 def unique_swipes_per_day(df, combined=False):
     if combined:
         return df.groupby(['Access Date', 'Source']).size().rename('Swipe Count').reset_index(level=0)
@@ -19,6 +20,16 @@ def unique_swipes_line_chart(df, tab="Baseline", pct=False):
                         *Only looking as Employees of London Lab (total employee n={lab_population_n})*
                         """)
         df['Pct Lab Population'] = df['Swipe Count']/lab_population_n
+        summary = (
+            alt.Chart(df)
+            .mark_boxplot()
+            .encode(
+                x=alt.X("Pct Lab Population:Q", title="Pct Lab Employee Population",axis=alt.Axis(format='%')),
+            ).properties(
+            #     width=400,
+                height=150
+            )
+        ).interactive()
         lines = (
             alt.Chart(df)
             .mark_line()
@@ -33,6 +44,17 @@ def unique_swipes_line_chart(df, tab="Baseline", pct=False):
                     ### Unique swipes sensed (Door Agnostic) 
                     *Something about this is expected / surprising*
                     """)
+        summary = (
+            alt.Chart(df)
+            .mark_boxplot()
+            .encode(
+                x=alt.X("Swipe Count:Q", title="Swipe Count"),
+                # x="Swipe Count",title="Swipe Count",
+            ).properties(
+            #     width=400,
+                height=300
+            )
+        ).interactive()
         lines = (
             alt.Chart(df)
             .mark_line()
@@ -65,33 +87,30 @@ def unique_swipes_line_chart(df, tab="Baseline", pct=False):
         # st.altair_chart(lines + comp_lines + rule + text, theme=None, use_container_width=True)
         st.altair_chart(lines + rule + text, theme=None, use_container_width=True)
     else:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.altair_chart(summary, theme=None, use_container_width=True)
+        with col2:
+            st.table(df.describe().style.format('{:7,.2f}'))
         st.altair_chart(lines, theme=None, use_container_width=True)
+        with st.expander("See chart data"):
+            st.dataframe(df)
 
 
-def bars_and_rolling_average(df):
+def counts_over_time(df):
     st.markdown("""
                 ### Getting to what's "typical" 
                 *Something about this is expected / surprising*
                 """)
-
-    line = alt.Chart(df).mark_line(color='red').transform_window(
-        # The field to average
-        rolling_mean='mean(Swipe Count)',
-        # The number of values before and after the current value to include.
-        frame=[-5, 0]
-    ).encode(
-        x='Access Date:T',
-        # y='rolling_mean:Q'
-        y=alt.Y('rolling_mean:Q', title='Rolling Mean of Swipe Count'),
-    ).interactive()
 
     bar = alt.Chart(df).mark_bar().encode(
         x='Access Date:T',
         y='Swipe Count:Q'
     )
 
-    st.altair_chart(bar + line, theme=None, use_container_width=True)
-
+    st.altair_chart(bar, theme=None, use_container_width=True)
+    with st.expander("See chart data"):
+        st.dataframe(df)
 
 def boxplot_by_day(df, tab="Baseline"):
     if tab == 'Baseline':
@@ -227,7 +246,7 @@ def baseline_tab(raw_df):
     # OVERVIEW
     unique_swipes_line_chart(swipe_cnts_df)
     unique_swipes_line_chart(employee_only_swipe_cnts_df, pct=True)
-    bars_and_rolling_average(swipe_cnts_df)
+    counts_over_time(swipe_cnts_df)
 
     # SPLIT BY DAY OF WEEK
     boxplot_by_day(swipe_cnts_df)
@@ -363,6 +382,14 @@ def sidebar(raw_df):
 
 
 if __name__ == "__main__":
+    pd.set_option("display.precision", 2)
+
+    # test = pd.get_option('precision')
+
+    # st.write(test)
+    # test = pd.set_option('display.float_format', '{:,.2f}'.format)
+    # st.write(test)
+
     is_unlocked = False
     raw_df, is_unlocked = upload_data_file()
 
