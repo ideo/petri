@@ -4,6 +4,10 @@ import numpy as np
 from utils import *
 from PIL import Image
 
+def print_pretty_df(df):
+    # st.table(df.style.format('{:7,.2f}'))
+    st.table(df)
+
 def print_summary_stats(df):
     st.table(df.describe().style.format('{:7,.2f}'))
 
@@ -16,16 +20,16 @@ def unique_swipes_per_day(df, combined=False):
 
 def unique_swipes_line_chart(df, tab="Baseline", pct=False):
     # timeseries - unique swipes per day
-    df['Pct Lab Population'] = df['Swipe Count'] / lab_population_n
 
     if pct:
+        df['Pct Lab Population'] = df['Swipe Count'] / lab_population_n
         st.markdown(f"""
                         ### Percent of Lab Employee Population Sensed 
                         *Only looking as Employees of London Lab / Excludes Contractors & Temp 
                         (total employee n={lab_population_n})*
                         """)
-        summaryX = alt.X("Pct Lab Population:Q", title="Pct Lab Employee Population", axis=alt.Axis(format='%'))
-        linesY = alt.Y("Pct Lab Population:Q", title="Pct Lab Employee Population", axis=alt.Axis(format='%'))
+        summaryX = alt.X("Pct Lab Population:Q", title="Pct Lab Employee Population", axis=alt.Axis(format='.0%'))
+        linesY = alt.Y("Pct Lab Population:Q", title="Pct Lab Employee Population", axis=alt.Axis(format='.0%'))
     else:
         st.markdown("""
                     ### Unique swipes sensed (Door Agnostic Counts) 
@@ -148,16 +152,12 @@ def boxplot_by_day(df, tab="Baseline"):
         df['Day Of Week'] = df['Day Of Week'].astype(category_day)
 
 
-        print_summary_stats(df.groupby('Day Of Week')['Swipe Count'])
-        with st.expander("See chart data"):
-            st.dataframe(df)
-
 def timeseries_by_day(df, tab="Baseline"):
-    if tab == "Baseline":
-        st.markdown("""
-                    ### Thursday & Tuesday consistently most crowded 
-                    *Something about this is expected / surprising*
-                    """)
+    # if tab == "Baseline":
+        # st.markdown("""
+        #             ### Thursday & Tuesday consistently most crowded
+        #             *Something about this is expected / surprising*
+        #             """)
 
     # TIMESERIES - group by day of week
     chart = alt.Chart(df).mark_line().encode(
@@ -191,7 +191,9 @@ def timeseries_by_day(df, tab="Baseline"):
 
     else:
         st.altair_chart(chart, theme=None, use_container_width=True)
-
+        print_summary_stats(df.groupby('Day Of Week')['Swipe Count'])
+        with st.expander("See chart data"):
+            st.dataframe(df)
 
 def extract_variables(df, file_type='Baseline'):
     min_date_value = df['Access Date'].min()
@@ -304,13 +306,25 @@ def swiper_patterns(df):
                 ### Most People Come Once a Week to Lab 
                 *Something about this is expected / surprising*
                 """)
-    df2 = df.groupby(['anon_id', 'Year-Week']).size().to_frame(name='Repeat Visits').reset_index()
+    df2 = df.groupby(['anon_id', 'Year-Week']).size().to_frame(name='Repeat Visits Per Week').reset_index()
     chart = alt.Chart(df2).mark_bar().encode(
-        x=alt.X('Repeat Visits:O', axis=alt.Axis(labelAngle=0)),
-        y=alt.Y('count()', title="Count",axis=alt.Axis(labelAngle=0)),
+        y=alt.Y('count():Q', title="Percent", axis=alt.Axis(labelAngle=0, format='.0%'), stack="normalize"),
+        color = 'Repeat Visits Per Week:O'
+    ).properties(
+            # height=150
     ).interactive()
-    st.altair_chart(chart, theme=None, use_container_width=True)
 
+    col1, col2 = st.columns(2)
+    with col2:
+        st.altair_chart(chart, theme=None, use_container_width=True)
+    print_df = df2.groupby(['Repeat Visits Per Week']).size().to_frame(name='Total Times Card Swiped X Times a Week')
+    total_visits = print_df['Total Times Card Swiped X Times a Week'].sum()
+    print_df['Percent'] = print_df['Total Times Card Swiped X Times a Week'] / total_visits
+    print_df.index.name = 'Repeat Visits Per Week'
+    print_df.reset_index(inplace=True)
+
+    with col1:
+        print_pretty_df(print_df)
 
     # chart = alt.Chart(df2).mark_boxplot().encode(
     #     x=alt.X('Repeat Visits:O', axis=alt.Axis(labelAngle=0)),
@@ -325,18 +339,17 @@ def swiper_patterns(df):
 
 
     # per card, look at avg times in studio per week (across baseline)
-    st.markdown("""
-                ### Special Events Bring People in More Often  
-                *Something about this is expected / surprising*
-                """)
+
     chart2 = alt.Chart(df2).mark_line().encode(
         x=alt.X('Year-Week:N', title="Year-Week",axis=alt.Axis(labelAngle=0)),
-        y=alt.Y("count()", title="Repeat Visits in a Week", axis=alt.Axis(labelAngle=0)),
-        color=alt.Color('Repeat Visits:N')
+        y=alt.Y("count()", title="Repeat Visits Per Week", axis=alt.Axis(labelAngle=0)),
+        color=alt.Color('Repeat Visits Per Week:N')
     ).interactive()
 
     st.altair_chart(chart2, theme=None, use_container_width=True)
-
+    # print_summary_stats(df2.groupby('Repeat Visits Per Week'))
+    with st.expander("See chart data"):
+        st.dataframe(df2)
     # note - missing tailgaters
     # note - missing events (brings in more people) & trips (to Detroit or elsewhere)
     # note - WFH is still work :)
