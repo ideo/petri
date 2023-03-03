@@ -1,4 +1,5 @@
 import altair as alt
+import pandas as pd
 from dateutil.relativedelta import relativedelta
 import numpy as np
 from utils import *
@@ -18,7 +19,7 @@ def unique_swipes_per_day(df, combined=False):
         return df.groupby('Access Date').size().rename('Swipe Count').reset_index(level=0)
 
 
-def unique_swipes_line_chart(df, tab="Baseline", pct=False):
+def unique_swipes_line_chart(df, compare_option="Experiment", tab="Baseline", pct=False):
     # timeseries - unique swipes per day
 
     if pct:
@@ -38,16 +39,37 @@ def unique_swipes_line_chart(df, tab="Baseline", pct=False):
         summaryX = alt.X("Swipe Count:Q", title="Swipe Count")
         linesY = "Swipe Count"
 
+    if compare_option == "Experiment":
+        compare = "Source"
+    else:
+        compare = "Quarter"
 
-    summary = (
-        alt.Chart(df)
-        .mark_boxplot()
-        .encode(
-            x=summaryX,
-        ).properties(
-            height=150
+    if tab == "Comparison":
+        df['Source'] = 'Baseline'
+        df.loc[df['Access Date'] >= experiment_start_date, 'Source'] = 'Post-Experiment'
+        summary = (
+            alt.Chart(df)
+            .mark_boxplot()
+            .encode(
+                x=summaryX,
+                # y="Quarter",
+                # color="Quarter",
+                y=compare,
+                color=compare,
+            ).properties(
+                height=300
+            )
         )
-    )
+    else:
+        summary = (
+            alt.Chart(df)
+            .mark_boxplot()
+            .encode(
+                x=summaryX,
+            ).properties(
+                height=150
+            )
+        )
     lines = (
         alt.Chart(df)
         .mark_line()
@@ -56,6 +78,16 @@ def unique_swipes_line_chart(df, tab="Baseline", pct=False):
             y=linesY,
         )
     ).interactive()
+
+    if tab == "Comparison":
+        st.altair_chart(summary, theme=None, use_container_width=True)
+        print_summary_stats(df.groupby(compare))
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.altair_chart(summary, theme=None, use_container_width=True)
+        with col2:
+            print_summary_stats(df)
 
     if tab == "Comparison":
         rule = alt.Chart(phases).mark_rule(
@@ -80,14 +112,11 @@ def unique_swipes_line_chart(df, tab="Baseline", pct=False):
         # st.altair_chart(lines + comp_lines + rule + text, theme=None, use_container_width=True)
         st.altair_chart(lines + rule + text, theme=None, use_container_width=True)
     else:
-        col1, col2 = st.columns(2)
-        with col1:
-            st.altair_chart(summary, theme=None, use_container_width=True)
-        with col2:
-            print_summary_stats(df)
+
         st.altair_chart(lines, theme=None, use_container_width=True)
-        with st.expander("See chart data"):
-            st.dataframe(df)
+
+    with st.expander("See chart data"):
+        st.dataframe(df)
 
 
 def counts_over_time(df):
@@ -105,7 +134,7 @@ def counts_over_time(df):
     with st.expander("See chart data"):
         st.dataframe(df)
 
-def boxplot_by_day(df, tab="Baseline"):
+def boxplot_by_day(df, compare_option="Experiment", tab="Baseline"):
     if tab == 'Baseline':
         st.markdown("""
                     ### Midweek is the busiest 
@@ -117,23 +146,23 @@ def boxplot_by_day(df, tab="Baseline"):
     df['Day Of Week'] = df['Day Of Week'].dt.day_name()
 
     if tab == 'Comparison':
+        if compare_option == 'Experiment':
+            compare = 'Source'
+        elif compare_option == 'Quarter':
+            compare = 'Quarter'
+
         df['Source'] = 'Baseline'
-        df.loc[df['Access Date'] >= experiment_start_date, 'Source'] = 'Comparison'
+        df.loc[df['Access Date'] >= experiment_start_date, 'Source'] = 'Post-Experiment'
 
         chart = alt.Chart(df).mark_boxplot().encode(
             # alt.Column('Day Of Week'),
-            x=alt.X('Source', title=None, axis=alt.Axis(labels=False, ticks=False), scale=alt.Scale(padding=1)),
+            x=alt.X(compare, title=None, axis=alt.Axis(labels=False, ticks=False), scale=alt.Scale(padding=1)),
             y='Swipe Count',
-            color="Source:N",
-            column=alt.Column('Day Of Week', sort=day_names, header=alt.Header(orient='bottom')),
-            # color=alt.Color('Day Of Week', sort=day_names),
+            color=compare,
         ).properties(
-            width=100
-            # width=120
-        ).configure_facet(
-            spacing=0
-        ).configure_view(
-            stroke=None
+            # width=100
+        ).facet(
+         column='Day Of Week:O'
         ).interactive()
         # st.altair_chart(chart, theme=None, use_container_width=True)
         st.altair_chart(chart, theme=None)
@@ -152,7 +181,7 @@ def boxplot_by_day(df, tab="Baseline"):
         df['Day Of Week'] = df['Day Of Week'].astype(category_day)
 
 
-def timeseries_by_day(df, tab="Baseline"):
+def timeseries_by_day(df, compare_option="Experiment", tab="Baseline"):
     # if tab == "Baseline":
         # st.markdown("""
         #             ### Thursday & Tuesday consistently most crowded
@@ -253,33 +282,58 @@ def baseline_tab(raw_df):
 
     swiper_patterns(df)
 
-def comparison_tab(df, debug=False):
+def add_quarters(df):
+    df['Quarter'] = pd.to_datetime(df['Access Date'], format='%Y-%m-%d')
+    df['Quarter'] = df['Quarter'].dt.to_period('Q').dt.strftime('%YQ%q')
+    return df
+
+def comparison_tab(raw_df, compare_option="Experiment", debug=False):
     # DATES FOR HEADER
     # min_baseline_date, max_baseline_date , person_types = extract_variables(df)
     if debug:
         st.header('DEBUG MODE')
 
+    min_date_value, max_date_value, person_types = extract_variables(raw_df)
 
+    st.title(f"Post Experiment Comparison")  # add a title
+    st.subheader(
+        f"Dates: {experiment_start_date:%a, %d %b %Y} - {max_date_value:%a, %d %b %Y}")
+    st.markdown(f"""
+                     This view allows for comparison of Door Data patterns post experiment start date with Baseline
+
+                   **Baseline Population of London Lab: {lab_population_n} people**
+         """)
     # Filter options - person type, dates, weekend
     # df = filter_options(df, person_types, tab="comparison")
 
     # aggregate unique swipes by day
-    swipe_cnts_df = unique_swipes_per_day(df)
+    swipe_cnts_df = unique_swipes_per_day(raw_df)
+    swipe_cnts_df = add_quarters(swipe_cnts_df)
+
+    # Employee only data for some graphs
+    employee_df = include_employees_only_data(df)
+    employee_only_swipe_cnts_df = unique_swipes_per_day(employee_df)
+    employee_only_swipe_cnts_df = add_quarters(employee_only_swipe_cnts_df)
 
     # #
     if debug:
         # Randomly add or subtract up to 5 swipes per day
         np.random.seed(42)
         swipe_cnts_df['Swipe Count'] = swipe_cnts_df['Swipe Count'] + np.random.randint(-5, 5)
+        employee_only_swipe_cnts_df['Swipe Count'] = employee_only_swipe_cnts_df['Swipe Count'] + np.random.randint(-5, 5)
+
+    df['Source'] = 'Baseline'
+    df.loc[df['Access Date'] >= experiment_start_date, 'Source'] = 'Post-Experiment'
 
 
     # GRAPHS
     # OVERVIEW
-    unique_swipes_line_chart(swipe_cnts_df, tab="Comparison")
+    unique_swipes_line_chart(swipe_cnts_df, compare_option, tab="Comparison")
+    unique_swipes_line_chart(employee_only_swipe_cnts_df, compare_option,pct=True, tab="Comparison")
 
     # # SPLIT BY DAY OF WEEK
-    boxplot_by_day(swipe_cnts_df, tab="Comparison")
-    timeseries_by_day(swipe_cnts_df, tab="Comparison")
+    boxplot_by_day(swipe_cnts_df, compare_option, tab="Comparison")
+    timeseries_by_day(swipe_cnts_df, compare_option, tab="Comparison")
 
 
     # HUNCHES
@@ -311,7 +365,7 @@ def swiper_patterns(df):
         y=alt.Y('count():Q', title="Percent", axis=alt.Axis(labelAngle=0, format='.0%'), stack="normalize"),
         color = 'Repeat Visits Per Week:O'
     ).properties(
-            # height=150
+            # height=500
     ).interactive()
 
     col1, col2 = st.columns(2)
@@ -358,7 +412,7 @@ def swiper_patterns(df):
 def generate_fake_data(df):
     # add 2 months to baseline data
     faux_df = df.copy()
-    faux_df['Access Date'] = df['Access Date'] + relativedelta(months=+2)
+    faux_df['Access Date'] = df['Access Date'] + relativedelta(months=+4)
     faux_df['Day Of Week'] = pd.to_datetime(faux_df['Access Date'], format='%Y-%m-%d')
     faux_df['Day Of Week'] = faux_df['Day Of Week'].dt.day_name()
     faux_df = remove_weekend_data(faux_df)
@@ -374,6 +428,13 @@ def sidebar(raw_df):
     # Filter options - person type, dates, weekend
     _, _, person_types = extract_variables(raw_df)
     df = filter_options(raw_df, person_types)
+    st.write("""
+        ---
+        Comparison Tab Option - Only Affects Some Graphs  
+        Source = Pre & Post Experiment
+        Quarter = Breaksdown by Quarter even before Experiment begins
+        """)
+    compare_option = st.radio("Compare By", ("Experiment", "Quarter"), 0, horizontal=True)
     # DEBUG
     debug = st.radio("Debug Comparison Tab?", (True, False), 0, horizontal=True)
     # DOWNLOAD CLEAN CVS option
@@ -388,25 +449,17 @@ def sidebar(raw_df):
         file_name='anonymous_door_data.csv',
         mime='text/csv'
     )
-    return df, debug
+    return df, debug, compare_option
 
 
 if __name__ == "__main__":
-    pd.set_option("display.precision", 2)
-
-    # test = pd.get_option('precision')
-
-    # st.write(test)
-    # test = pd.set_option('display.float_format', '{:,.2f}'.format)
-    # st.write(test)
-
     is_unlocked = False
     raw_df, is_unlocked = upload_data_file()
 
 
     if is_unlocked:
         with st.sidebar:
-            df, debug = sidebar(raw_df)
+            df, debug, compare_option = sidebar(raw_df)
 
         tab1, tab2 = st.tabs(["Baseline", "Comparison"])
         # App Output
@@ -417,9 +470,9 @@ if __name__ == "__main__":
         with tab2:
             if debug:
                 faux_df = generate_fake_data(df)
-                comparison_tab(faux_df, debug=True)
+                comparison_tab(faux_df, compare_option, debug=True)
             else:
-                comparison_tab(df)
+                comparison_tab(df, compare_option)
     else:
 
         st.code('Welcome! Upload the Correct Data to Unlock')
