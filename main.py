@@ -9,8 +9,11 @@ def print_pretty_df(df):
     # st.table(df.style.format('{:7,.2f}'))
     st.table(df)
 
-def print_summary_stats(df):
-    st.table(df.describe().style.format('{:7,.2f}'))
+def print_summary_stats(df, dataframe=False):
+    if dataframe:
+        st.dataframe(df.describe().style.format('{:7,.2f}'))
+    else:
+        st.table(df.describe().style.format('{:7,.2f}'))
 
 def unique_swipes_per_day(df, combined=False):
     if combined:
@@ -187,7 +190,10 @@ def timeseries_by_day(df, compare_option="Experiment", tab="Baseline"):
         #             ### Thursday & Tuesday consistently most crowded
         #             *Something about this is expected / surprising*
         #             """)
-
+    if compare_option == 'Experiment':
+        compare = "Source"
+    else:
+        compare = "Quarter"
     # TIMESERIES - group by day of week
     chart = alt.Chart(df).mark_line().encode(
         x='Access Date',
@@ -217,7 +223,9 @@ def timeseries_by_day(df, compare_option="Experiment", tab="Baseline"):
             color=alt.value('#000000')
         )
         st.altair_chart(chart + rule + text, theme=None, use_container_width=True)
-
+        print_summary_stats(df.groupby(['Day Of Week', compare])['Swipe Count'], dataframe=True)
+        with st.expander("See chart data"):
+            st.dataframe(df)
     else:
         st.altair_chart(chart, theme=None, use_container_width=True)
         print_summary_stats(df.groupby('Day Of Week')['Swipe Count'])
@@ -263,11 +271,11 @@ def baseline_tab(raw_df):
                     """)
 
     # Employee only data for some graphs
-    employee_df = include_employees_only_data(df)
+    employee_df = include_employees_only_data(raw_df)
     employee_only_swipe_cnts_df = unique_swipes_per_day(employee_df)
 
     # aggregate unique swipes by day
-    swipe_cnts_df = unique_swipes_per_day(df)
+    swipe_cnts_df = unique_swipes_per_day(raw_df)
 
     # GRAPHS
 
@@ -280,7 +288,7 @@ def baseline_tab(raw_df):
     boxplot_by_day(swipe_cnts_df)
     timeseries_by_day(swipe_cnts_df)
 
-    swiper_patterns(df)
+    swiper_patterns(raw_df)
 
 def add_quarters(df):
     df['Quarter'] = pd.to_datetime(df['Access Date'], format='%Y-%m-%d')
@@ -311,7 +319,7 @@ def comparison_tab(raw_df, compare_option="Experiment", debug=False):
     swipe_cnts_df = add_quarters(swipe_cnts_df)
 
     # Employee only data for some graphs
-    employee_df = include_employees_only_data(df)
+    employee_df = include_employees_only_data(raw_df)
     employee_only_swipe_cnts_df = unique_swipes_per_day(employee_df)
     employee_only_swipe_cnts_df = add_quarters(employee_only_swipe_cnts_df)
 
@@ -335,6 +343,8 @@ def comparison_tab(raw_df, compare_option="Experiment", debug=False):
     boxplot_by_day(swipe_cnts_df, compare_option, tab="Comparison")
     timeseries_by_day(swipe_cnts_df, compare_option, tab="Comparison")
 
+    raw_df = add_quarters(raw_df)
+    # swiper_patterns(raw_df, compare_option, tab="Comparison")
 
     # HUNCHES
     # more people will come on wednesdays
@@ -344,42 +354,70 @@ def comparison_tab(raw_df, compare_option="Experiment", debug=False):
     # combo of both?
 
 
-def swiper_patterns(df):
+def swiper_patterns(df, compare_option="Experiment", tab="Baseline"):
 
     # SPLIT BY DAY OF WEEK
     df['Day Of Week'] = pd.to_datetime(df['Access Date'], format='%Y-%m-%d')
     df['Day Of Week'] = df['Day Of Week'].dt.day_name()
     df['Year-Week'] = pd.to_datetime(df['Access Date']).dt.strftime('%Y-%U')
 
+    df['Source'] = 'Baseline'
+    df.loc[df['Access Date'] >= experiment_start_date, 'Source'] = 'Post-Experiment'
+
+    if compare_option == "Experiment":
+        compare = "Source"
+    else:
+        compare = "Quarter"
+
     # how many days a week is the same card used?
 
     # some people come 1 day a week, some 5 - what's the distribution?
     # each week (or month or range), look at hist of how often same card is used in time period
 
-    st.markdown("""
-                ### Most People Come Once a Week to Lab 
+    if tab == 'Baseline':
+        st.markdown("""
+                ### Most People Come Once a Week to Lab
                 *Something about this is expected / surprising*
                 """)
-    df2 = df.groupby(['anon_id', 'Year-Week']).size().to_frame(name='Repeat Visits Per Week').reset_index()
-    chart = alt.Chart(df2).mark_bar().encode(
-        y=alt.Y('count():Q', title="Percent", axis=alt.Axis(labelAngle=0, format='.0%'), stack="normalize"),
-        color = 'Repeat Visits Per Week:O'
-    ).properties(
+
+        df2 = df.groupby(['anon_id', 'Year-Week']).size().to_frame(name='Repeat Visits Per Week').reset_index().copy()
+        chart = alt.Chart(df2).mark_bar().encode(
+            y=alt.Y('count():Q', title="Percent", axis=alt.Axis(labelAngle=0, format='.0%'), stack="normalize"),
+            color = 'Repeat Visits Per Week:O'
+        ).properties(
+                # height=500
+        ).interactive()
+    else:
+        st.dataframe(df)
+        df2 = df.groupby(['anon_id', 'Year-Week']).size().to_frame(name='Repeat Visits Per Week').reset_index().copy()
+        chart = not not alt.Chart(df2).mark_bar().encode(
+            # x="Quarter",
+            # x=compare,
+            x=compare,
+            y=alt.Y('count():Q', title="Percent", axis=alt.Axis(labelAngle=0, format='.0%'), stack="normalize"),
+            color='Repeat Visits Per Week:O'
+        ).properties(
             # height=500
-    ).interactive()
+        ).interactive()
 
-    col1, col2 = st.columns(2)
-    with col2:
+
+    if tab == 'Baseline':
+        col1, col2 = st.columns(2)
+
+        print_df = df2.groupby(['Repeat Visits Per Week']).size().to_frame(
+            name='Total Times Card Swiped X Times a Week')
+        total_visits = print_df['Total Times Card Swiped X Times a Week'].sum()
+        print_df['Percent'] = print_df['Total Times Card Swiped X Times a Week'] / total_visits
+        print_df.index.name = 'Repeat Visits Per Week'
+        print_df.reset_index(inplace=True)
+
+        with col1:
+            print_pretty_df(print_df)
+
+        with col2:
+            st.altair_chart(chart, theme=None, use_container_width=True)
+    else:
         st.altair_chart(chart, theme=None, use_container_width=True)
-    print_df = df2.groupby(['Repeat Visits Per Week']).size().to_frame(name='Total Times Card Swiped X Times a Week')
-    total_visits = print_df['Total Times Card Swiped X Times a Week'].sum()
-    print_df['Percent'] = print_df['Total Times Card Swiped X Times a Week'] / total_visits
-    print_df.index.name = 'Repeat Visits Per Week'
-    print_df.reset_index(inplace=True)
-
-    with col1:
-        print_pretty_df(print_df)
-
     # chart = alt.Chart(df2).mark_boxplot().encode(
     #     x=alt.X('Repeat Visits:O', axis=alt.Axis(labelAngle=0)),
     #     y=alt.Y("datum['Year-Week'].mean()"),
@@ -390,10 +428,10 @@ def swiper_patterns(df):
     # #     color=alt.Color('Day Of Week', sort=day_names),
     # # ).interactive()
     # st.altair_chart(chart, theme=None, use_container_width=True)
-
-
-    # per card, look at avg times in studio per week (across baseline)
-
+    # #
+    # #
+    # # # per card, look at avg times in studio per week (across baseline)
+    #
     chart2 = alt.Chart(df2).mark_line().encode(
         x=alt.X('Year-Week:N', title="Year-Week",axis=alt.Axis(labelAngle=0)),
         y=alt.Y("count()", title="Repeat Visits Per Week", axis=alt.Axis(labelAngle=0)),
@@ -404,9 +442,9 @@ def swiper_patterns(df):
     # print_summary_stats(df2.groupby('Repeat Visits Per Week'))
     with st.expander("See chart data"):
         st.dataframe(df2)
-    # note - missing tailgaters
-    # note - missing events (brings in more people) & trips (to Detroit or elsewhere)
-    # note - WFH is still work :)
+    # # note - missing tailgaters
+    # # note - missing events (brings in more people) & trips (to Detroit or elsewhere)
+    # # note - WFH is still work :)
 
 
 def generate_fake_data(df):
@@ -427,21 +465,21 @@ def convert_df(df):
 def sidebar(raw_df):
     # Filter options - person type, dates, weekend
     _, _, person_types = extract_variables(raw_df)
+    st.subheader("""Filter Options""")
     df = filter_options(raw_df, person_types)
     st.write("""
         ---
-        Comparison Tab Option - Only Affects Some Graphs  
-        Source = Pre & Post Experiment
-        Quarter = Breaksdown by Quarter even before Experiment begins
         """)
+    st.subheader("""Comparison Tab Option - Only Affects Some Graphs""")
     compare_option = st.radio("Compare By", ("Experiment", "Quarter"), 0, horizontal=True)
     # DEBUG
     debug = st.radio("Debug Comparison Tab?", (True, False), 0, horizontal=True)
     # DOWNLOAD CLEAN CVS option
     st.write("""
     ---
-    To run further analysis, download cvs. Data is anonymized and door agnostic
     """)
+    st.subheader("""Further Analysis""")
+    st.write('To run further analysis, download cvs. Data is anonymized and door agnostic')
     csv = convert_df(raw_df)
     st.download_button(
         label="Download clean data as CSV",
