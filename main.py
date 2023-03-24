@@ -5,6 +5,10 @@ import numpy as np
 from utils import *
 from PIL import Image
 
+def print_chart_df(df):
+    with st.expander("See chart data"):
+        st.dataframe(df)
+
 def print_pretty_df(df):
     # st.table(df.style.format('{:7,.2f}'))
     st.table(df)
@@ -22,7 +26,7 @@ def unique_swipes_per_day(df, combined=False):
         return df.groupby('Access Date').size().rename('Swipe Count').reset_index(level=0)
 
 
-def unique_swipes_line_chart(df, compare_option="Experiment", tab="Baseline", pct=False):
+def unique_swipes_line_chart(df, compare_option="Experiment", tab="Baseline", pct=False, show_data=False):
     # timeseries - unique swipes per day
 
     if pct:
@@ -118,15 +122,11 @@ def unique_swipes_line_chart(df, compare_option="Experiment", tab="Baseline", pc
 
         st.altair_chart(lines, theme=None, use_container_width=True)
 
-    with st.expander("See chart data"):
-        st.dataframe(df)
+    if show_data:
+        print_chart_df(df)
 
 
-def counts_over_time(df):
-    st.markdown("""
-                ### Getting to what's "typical" 
-                *Something about this is expected / surprising*
-                """)
+def counts_over_time_bar_chart(df):
 
     bar = alt.Chart(df).mark_bar().encode(
         x='Access Date:T',
@@ -134,8 +134,7 @@ def counts_over_time(df):
     )
 
     st.altair_chart(bar, theme=None, use_container_width=True)
-    with st.expander("See chart data"):
-        st.dataframe(df)
+    print_chart_df(df)
 
 def boxplot_by_day(df, compare_option="Experiment", tab="Baseline"):
     if tab == 'Baseline':
@@ -162,12 +161,9 @@ def boxplot_by_day(df, compare_option="Experiment", tab="Baseline"):
             x=alt.X(compare, title=None, axis=alt.Axis(labels=False, ticks=False), scale=alt.Scale(padding=1)),
             y='Swipe Count',
             color=compare,
-        ).properties(
-            # width=100
         ).facet(
-         column='Day Of Week:O'
+            column=alt.Column('Day Of Week:O', sort=day_names)
         ).interactive()
-        # st.altair_chart(chart, theme=None, use_container_width=True)
         st.altair_chart(chart, theme=None)
 
     else:
@@ -224,13 +220,11 @@ def timeseries_by_day(df, compare_option="Experiment", tab="Baseline"):
         )
         st.altair_chart(chart + rule + text, theme=None, use_container_width=True)
         print_summary_stats(df.groupby(['Day Of Week', compare])['Swipe Count'], dataframe=True)
-        with st.expander("See chart data"):
-            st.dataframe(df)
+        print_chart_df(df)
     else:
         st.altair_chart(chart, theme=None, use_container_width=True)
         print_summary_stats(df.groupby('Day Of Week')['Swipe Count'])
-        with st.expander("See chart data"):
-            st.dataframe(df)
+        print_chart_df(df)
 
 def extract_variables(df, file_type='Baseline'):
     min_date_value = df['Access Date'].min()
@@ -281,8 +275,8 @@ def baseline_tab(raw_df):
 
     # OVERVIEW
     unique_swipes_line_chart(swipe_cnts_df)
-    unique_swipes_line_chart(employee_only_swipe_cnts_df, pct=True)
-    counts_over_time(swipe_cnts_df)
+    counts_over_time_bar_chart(swipe_cnts_df)
+    unique_swipes_line_chart(employee_only_swipe_cnts_df, pct=True, show_data=True)
 
     # SPLIT BY DAY OF WEEK
     boxplot_by_day(swipe_cnts_df)
@@ -336,8 +330,8 @@ def comparison_tab(raw_df, compare_option="Experiment", debug=False):
 
     # GRAPHS
     # OVERVIEW
-    unique_swipes_line_chart(swipe_cnts_df, compare_option, tab="Comparison")
-    unique_swipes_line_chart(employee_only_swipe_cnts_df, compare_option,pct=True, tab="Comparison")
+    unique_swipes_line_chart(swipe_cnts_df, compare_option, tab="Comparison", show_data=True)
+    unique_swipes_line_chart(employee_only_swipe_cnts_df, compare_option,pct=True, tab="Comparison", show_data=True)
 
     # # SPLIT BY DAY OF WEEK
     boxplot_by_day(swipe_cnts_df, compare_option, tab="Comparison")
@@ -440,8 +434,7 @@ def swiper_patterns(df, compare_option="Experiment", tab="Baseline"):
 
     st.altair_chart(chart2, theme=None, use_container_width=True)
     # print_summary_stats(df2.groupby('Repeat Visits Per Week'))
-    with st.expander("See chart data"):
-        st.dataframe(df2)
+    print_chart_df(df2)
     # # note - missing tailgaters
     # # note - missing events (brings in more people) & trips (to Detroit or elsewhere)
     # # note - WFH is still work :)
