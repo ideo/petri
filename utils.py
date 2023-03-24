@@ -171,7 +171,7 @@ def upload_data_file():
             is_unlocked = True
             baseline_df = clean_df(baseline_df)
         else:
-            st.code('TRY AGAIN!')
+            st.code(f'TRY AGAIN! Required data columns are: Access Date, CDSID, Person Type')
 
     return baseline_df, is_unlocked
 
