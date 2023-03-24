@@ -466,7 +466,7 @@ def sidebar(raw_df):
     st.subheader("""Comparison Tab Option - Only Affects Some Graphs""")
     compare_option = st.radio("Compare By", ("Experiment", "Quarter"), 0, horizontal=True)
     # DEBUG
-    debug = st.radio("Debug Comparison Tab?", (True, False), 0, horizontal=True)
+    debug = st.radio("Debug Comparison Tab?", (True, False), 1, horizontal=True)
     # DOWNLOAD CLEAN CVS option
     st.write("""
     ---
