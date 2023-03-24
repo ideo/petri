@@ -81,7 +81,7 @@ def unique_swipes_line_chart(df, compare_option="Experiment", tab="Baseline", pc
         alt.Chart(df)
         .mark_line()
         .encode(
-            x=alt.X("Access Date:T", title="Access Date"),
+            x=alt.X("Access Date:T", title="Access Date", axis=alt.Axis(labelAngle=45)),
             y=linesY,
         )
     ).interactive()
@@ -129,7 +129,7 @@ def unique_swipes_line_chart(df, compare_option="Experiment", tab="Baseline", pc
 def counts_over_time_bar_chart(df):
 
     bar = alt.Chart(df).mark_bar().encode(
-        x='Access Date:T',
+        x=alt.X("Access Date:T", title="Access Date", axis=alt.Axis(labelAngle=45)),
         y='Swipe Count:Q'
     )
 
@@ -427,7 +427,7 @@ def swiper_patterns(df, compare_option="Experiment", tab="Baseline"):
     # # # per card, look at avg times in studio per week (across baseline)
     #
     chart2 = alt.Chart(df2).mark_line().encode(
-        x=alt.X('Year-Week:N', title="Year-Week",axis=alt.Axis(labelAngle=0)),
+        x=alt.X('Year-Week:N', title="Year-Week",axis=alt.Axis(labelAngle=45)),
         y=alt.Y("count()", title="Repeat Visits Per Week", axis=alt.Axis(labelAngle=0)),
         color=alt.Color('Repeat Visits Per Week:N')
     ).interactive()
